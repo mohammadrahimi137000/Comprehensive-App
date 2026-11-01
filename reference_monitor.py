@@ -36,6 +36,7 @@ class SpotReferenceMonitor:
         self._thread: threading.Thread | None = None
         self._last_xaus = 0.0
         self._last_corgano = 0.0
+        self._last_report = 0.0
         self._references: dict[str, SpotReference] = {}
 
     def _status(self, message: str):
@@ -78,7 +79,8 @@ class SpotReferenceMonitor:
                 except Exception as exc:
                     self._status(f"Corgano reference unavailable: {type(exc).__name__}")
 
-            if self._references:
+            if self._references and monotonic_now - self._last_report >= 5.0:
+                self._last_report = monotonic_now
                 result = compare_reference_prices(quote, list(self._references.values()), now=now)
                 if self.on_result:
                     self.on_result(result)
