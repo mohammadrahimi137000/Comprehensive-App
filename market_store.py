@@ -105,7 +105,7 @@ class MarketStore:
             rows = connection.execute(
                 """SELECT source, COUNT(*) AS candle_count, MAX(timestamp) AS latest_timestamp
                    FROM candles WHERE symbol=? AND timeframe=?
-                   GROUP BY source ORDER BY latest_timestamp DESC""",
+                   GROUP BY source ORDER BY latest_timestamp DESC, CASE WHEN source='BiQuote OHLC' THEN 1 ELSE 0 END, candle_count DESC""",
                 (symbol.strip().upper(), timeframe.strip().upper()),
             ).fetchall()
         return [dict(row) for row in rows]
