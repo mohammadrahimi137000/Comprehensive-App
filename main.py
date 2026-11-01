@@ -1,15 +1,17 @@
 """Desktop dashboard for the Comprehensive-App chart detection foundation."""
 from __future__ import annotations
 
+import json
 import sys
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication, QFrame, QHBoxLayout, QLabel, QMainWindow, QPushButton,
-    QStackedWidget, QVBoxLayout, QWidget,
+    QStackedWidget, QVBoxLayout, QWidget, QLineEdit, QComboBox, QPlainTextEdit,
 )
 
 from auto_chart_detector import ChartScanner
+from analysis_service import AnalysisService
 
 
 class MainWindow(QMainWindow):
@@ -19,6 +21,7 @@ class MainWindow(QMainWindow):
         self.resize(1400, 850)
         self.setMinimumSize(1050, 680)
         self.scanner = None
+        self.analysis_service = AnalysisService()
         self._build_ui()
         self._start_scanner()
 
@@ -126,10 +129,36 @@ class MainWindow(QMainWindow):
             self.detector_result.setObjectName("panel")
             self.detector_result.setStyleSheet("padding:24px;font-size:16px;")
             layout.addWidget(self.detector_result)
+        elif index == 2:
+            note = QLabel(
+                "تحلیل فقط روی کندل‌های ذخیره‌شده و معتبر اجرا می‌شود. "
+                "در این نسخه هنوز فید زنده متصل نیست و خروجی، سیگنال آماده معامله نیست."
+            )
+            note.setWordWrap(True)
+            note.setObjectName("muted")
+            layout.addWidget(note)
+            controls = QHBoxLayout()
+            self.analysis_symbol = QLineEdit("XAUUSD")
+            self.analysis_symbol.setPlaceholderText("نماد، مانند XAUUSD")
+            self.analysis_timeframe = QComboBox()
+            self.analysis_timeframe.addItems(["M1", "M5", "M15", "H1"])
+            self.analysis_source = QComboBox()
+            self.analysis_source.addItems(["همه منابع", "spot", "broker"])
+            run_button = QPushButton("تحلیل آخرین کندل‌های ذخیره‌شده")
+            run_button.clicked.connect(self._run_analysis)
+            controls.addWidget(self.analysis_symbol)
+            controls.addWidget(self.analysis_timeframe)
+            controls.addWidget(self.analysis_source)
+            controls.addWidget(run_button)
+            layout.addLayout(controls)
+            self.analysis_output = QPlainTextEdit()
+            self.analysis_output.setReadOnly(True)
+            self.analysis_output.setPlaceholderText("نتیجه تحلیل پس از وجود حداقل ۳۰ کندل نمایش داده می‌شود.")
+            layout.addWidget(self.analysis_output, 1)
         else:
             note = QLabel(
-                "این بخش در نقشه راه قرار دارد و تا اتصال داده بازار و موتور تحلیل، "
-                "خروجی معاملاتی تولید نمی‌کند."
+                "این بخش در نقشه راه قرار دارد. تا اتصال منبع داده معتبر و تکمیل "
+                "موتور مربوطه، هیچ خروجی معاملاتی در این صفحه تولید نمی‌شود."
             )
             note.setWordWrap(True)
             note.setObjectName("muted")
@@ -159,6 +188,26 @@ class MainWindow(QMainWindow):
             button.setProperty("active", i == index)
             button.style().unpolish(button)
             button.style().polish(button)
+
+
+    def _run_analysis(self):
+        symbol = self.analysis_symbol.text().strip()
+        timeframe = self.analysis_timeframe.currentText()
+        source = self.analysis_source.currentText()
+        if not symbol:
+            self.analysis_output.setPlainText("لطفاً نماد را وارد کنید.")
+            return
+        if source == "همه منابع":
+            source = None
+        try:
+            result = self.analysis_service.analyze_latest(
+                symbol=symbol, timeframe=timeframe, source=source
+            )
+            self.analysis_output.setPlainText(json.dumps(
+                result, ensure_ascii=False, indent=2
+            ))
+        except Exception as exc:
+            self.analysis_output.setPlainText(str(exc))
 
     def _start_scanner(self):
         # The first positional parameter is the scan interval, not the Qt parent.
