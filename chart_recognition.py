@@ -88,8 +88,8 @@ def recognize_chart(
     symbol = next((item for item in _SYMBOLS if item in compact), None)
     timeframe = None
     timeframe_minutes = None
-    for raw, minutes in _TIMEFRAMES.items():
-        if re.search(rf"(?<![A-Z0-9]){raw}(?![A-Z0-9])", text) or raw in compact:
+    for raw, minutes in sorted(_TIMEFRAMES.items(), key=lambda item: len(item[0]), reverse=True):
+        if re.search(rf"(?<![A-Z0-9]){raw}(?![A-Z0-9])", text) or re.search(rf"(?<!\\d){raw}(?!\\d)", compact):
             timeframe, timeframe_minutes = raw, minutes
             break
 
@@ -153,7 +153,7 @@ def recognize_chart(
             open_y, close_y = (body_bottom, body_top) if green > red else (body_top, body_bottom)
             candles.append({
                 "x": item["x"] + screen_origin[0],
-                "open": round(price_at(open_y + screen_origin[1]), 6) if False else round(price_at(open_y), 6),
+                "open": round(price_at(open_y), 6),
                 "high": round(price_at(full_top), 6),
                 "low": round(price_at(full_bottom), 6),
                 "close": round(price_at(close_y), 6),
