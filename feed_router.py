@@ -59,16 +59,18 @@ class QuoteRouter:
         rejected = []
         candidates = []
         for quote in quotes:
-            age = (now - quote.timestamp).total_seconds()
             reason = None
+            if quote.timestamp.tzinfo is None:
+                reason = "timestamp_without_timezone"
+                age = 0.0
+            else:
+                age = (now - quote.timestamp).total_seconds()
             if quote.instrument.upper() != instrument.upper():
                 reason = "instrument_mismatch"
             elif quote.market_type != market_type:
                 reason = "market_type_mismatch"
             elif quote.is_simulated:
                 reason = "simulated_data"
-            elif quote.timestamp.tzinfo is None:
-                reason = "timestamp_without_timezone"
             elif age > self.max_age_seconds:
                 reason = "stale_quote"
             elif age < -self.max_future_seconds:
