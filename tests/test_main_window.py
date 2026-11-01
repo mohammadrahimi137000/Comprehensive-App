@@ -33,6 +33,17 @@ class FakeFeed:
     def stop(self):
         pass
 
+    def get_latest_quote(self, symbol="XAUUSD"):
+        return None
+
+
+class FakeBootstrapper:
+    def __init__(self, **kwargs):
+        pass
+
+    def bootstrap_if_needed(self, symbol="XAUUSD"):
+        return {}
+
 
 def test_main_window_builds_all_pages_without_starting_network(monkeypatch, tmp_path):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -41,6 +52,7 @@ def test_main_window_builds_all_pages_without_starting_network(monkeypatch, tmp_
     monkeypatch.setattr(main, "AnalysisService", lambda: AnalysisService(store=store))
     monkeypatch.setattr(main, "ChartScanner", FakeScanner)
     monkeypatch.setattr(main, "ResilientBiQuoteFeed", FakeFeed)
+    monkeypatch.setattr(main, "HistoryBootstrapper", FakeBootstrapper)
 
     window = main.MainWindow()
     assert len(window.nav_buttons) == 9
