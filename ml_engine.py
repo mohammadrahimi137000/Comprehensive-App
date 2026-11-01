@@ -28,12 +28,12 @@ def _features(candles: list[dict], index: int) -> list[float]:
     mean20 = mean(closes[-20:]) if len(closes) >= 20 else mean(closes)
     return [
         1.0,
-        (last - mean5) / max(abs(last), 1e-9),
-        (last - mean20) / max(abs(last), 1e-9),
-        mean(returns[-5:]) if returns else 0.0,
-        mean(returns[-15:]) if returns else 0.0,
-        mean(ranges[-14:]) if ranges else 0.0,
-        (max(highs[-14:]) - min(lows[-14:])) / max(abs(last), 1e-9),
+        10_000 * (last - mean5) / max(abs(last), 1e-9),
+        10_000 * (last - mean20) / max(abs(last), 1e-9),
+        10_000 * (mean(returns[-5:]) if returns else 0.0),
+        10_000 * (mean(returns[-15:]) if returns else 0.0),
+        10_000 * (mean(ranges[-14:]) if ranges else 0.0),
+        10_000 * (max(highs[-14:]) - min(lows[-14:])) / max(abs(last), 1e-9),
     ]
 
 
@@ -56,7 +56,9 @@ class WalkForwardDirectionModel:
             current = float(candles[index]["close"])
             data.append((x, 1.0 if future > current else 0.0))
         split = int(len(data) * 0.75)
-        train, test = data[:split], data[split:]
+        # Purge the final horizon observations from training so labels cannot
+        # overlap the chronological holdout period.
+        train, test = data[:max(0, split - horizon)], data[split:]
         if len(train) < 100 or len(test) < 20:
             raise ValueError("Not enough separated train/holdout samples.")
 
@@ -78,6 +80,7 @@ class WalkForwardDirectionModel:
         accuracy = mean(float(a == b) for a, b in zip(predictions, labels))
         brier = mean((p - y) ** 2 for p, y in zip(probabilities, labels))
         baseline = max(mean(labels), 1 - mean(labels))
+        baseline_brier = mean(labels) * (1.0 - mean(labels))
         self.weights = weights
         self.metrics = {
             "train_samples": len(train), "holdout_samples": len(test),
@@ -85,8 +88,10 @@ class WalkForwardDirectionModel:
             "holdout_brier_score": round(brier, 4),
             "majority_class_baseline": round(baseline, 4),
             "beats_majority_baseline": accuracy > baseline,
+            "prevalence_brier_baseline": round(baseline_brier, 4),
+            "beats_brier_baseline": brier < baseline_brier,
             "horizon_candles": horizon,
-            "features": ["bias", "return_vs_mean5", "return_vs_mean20",
+            "features": ["bias", "scaled_return_vs_mean5", "scaled_return_vs_mean20",
                          "mean_return5", "mean_return15", "mean_range14", "range14"],
             "warning": "Single chronological holdout; not a guarantee of future performance.",
         }
