@@ -46,6 +46,8 @@ def evaluate_forecast_history(
         payload = snapshot.get("payload") or {}
         if snapshot.get("source") not in {"analysis_engine", source}:
             continue
+        if payload.get("source") not in {None, source}:
+            continue
         if str(snapshot.get("timeframe", timeframe)).upper() != timeframe.upper():
             continue
         timestamp = payload.get("last_candle_timestamp")
