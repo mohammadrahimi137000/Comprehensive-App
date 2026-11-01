@@ -9,6 +9,7 @@ from typing import Callable
 from feed_router import Quote
 from provider_clients import CorganoSpotAdapter, SpotReference, XausSpotAdapter
 from reference_comparator import compare_reference_prices
+from market_session import MarketSession
 
 
 class SpotReferenceMonitor:
@@ -22,6 +23,7 @@ class SpotReferenceMonitor:
         corgano_interval_seconds: float = 240.0,
         broker_max_age_seconds: float = 15.0,
         clock: Callable[[], datetime] | None = None,
+        market_is_open: Callable[[], bool] | None = None,
     ):
         self.latest_broker_quote = latest_broker_quote
         self.on_result = on_result
@@ -32,6 +34,7 @@ class SpotReferenceMonitor:
         self.corgano_interval_seconds = max(180.0, corgano_interval_seconds)
         self.broker_max_age_seconds = broker_max_age_seconds
         self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self.market_is_open = market_is_open or MarketSession(clock=self.clock).is_open
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._last_xaus = 0.0
