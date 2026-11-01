@@ -44,3 +44,19 @@ def test_service_selects_one_complete_source_instead_of_mixing_feeds(tmp_path):
     store.upsert_candles("broker_live", "XAUUSD", "M1", newer)
     result = AnalysisService(store=store).analyze_latest("XAUUSD", "M1")
     assert result["source"] == "broker_live"
+
+
+def test_service_uses_saved_ml_model_only_for_matching_source(tmp_path):
+    from ml_engine import WalkForwardDirectionModel
+
+    store = MarketStore(tmp_path / "market.db")
+    history = rows(500)
+    store.upsert_candles("broker", "XAUUSD", "M1", history)
+    model = WalkForwardDirectionModel(epochs=60)
+    model.fit(history, horizon=15)
+    model.metadata = {"symbol": "XAUUSD", "timeframe": "M1", "source": "broker"}
+    model.save(tmp_path / "ml_model.json", model.metadata)
+
+    result = AnalysisService(store=store).analyze_latest("XAUUSD", "M1")
+    assert result["source"] == "broker"
+    assert result["ml_prediction"]["model"] == "logistic_regression_walk_forward"
