@@ -28,6 +28,7 @@ from ml_engine import WalkForwardDirectionModel
 from tick_flow import TickPressure
 from news_engine import RssNewsClient
 from reference_monitor import SpotReferenceMonitor
+from history_bootstrap import HistoryBootstrapper
 
 
 class FeedBridge(QObject):
@@ -47,6 +48,10 @@ class MainWindow(QMainWindow):
         self.trade_journal = TradeJournal(self.analysis_service.store.database_path)
         self.current_chart_info = None
         self.market_pipeline = LiveMarketPipeline(store=self.analysis_service.store)
+        self.history_bootstrapper = HistoryBootstrapper(
+            store=self.analysis_service.store,
+            on_status=self.feed_bridge.status_changed.emit,
+        )
         self.ml_model = WalkForwardDirectionModel()
         self.tick_pressure = TickPressure()
         self.latest_tick_pressure = self.tick_pressure.snapshot()
@@ -518,6 +523,10 @@ class MainWindow(QMainWindow):
     def _start_market_feed(self):
         def connect_feed():
             try:
+                bootstrap = self.history_bootstrapper.bootstrap_if_needed("XAUUSD")
+                self.feed_bridge.status_changed.emit(
+                    "تاریخچه اولیه آماده شد: " + json.dumps(bootstrap, ensure_ascii=False)
+                )
                 self.market_feed.start()
                 if self._closing:
                     self.market_feed.stop()
