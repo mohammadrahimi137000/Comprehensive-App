@@ -429,8 +429,9 @@ class MainWindow(QMainWindow):
         try:
             result = self.analysis_service.analyze_latest("XAUUSD", "M1")
             projection = ChartProjection(
-                chart_left=roi["left"], chart_top=roi["top"],
-                chart_right=roi["right"], chart_bottom=roi["bottom"],
+                chart_left=roi["left"], chart_top=axis["y_at_top"] + origin_y,
+                chart_right=self.current_chart_info["right"] - 70,
+                chart_bottom=axis["y_at_bottom"] + origin_y,
                 price_at_top=axis["price_at_top"],
                 y_at_top=axis["y_at_top"] + origin_y,
                 price_at_bottom=axis["price_at_bottom"],
