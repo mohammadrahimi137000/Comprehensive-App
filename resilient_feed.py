@@ -7,6 +7,7 @@ from typing import Callable
 
 from feed_router import Quote
 from provider_clients import BiQuoteRestAdapter
+from market_session import MarketSession
 
 
 class ResilientBiQuoteFeed:
@@ -32,7 +33,7 @@ class ResilientBiQuoteFeed:
         self.rest = rest_adapter or BiQuoteRestAdapter()
         self.stale_after_seconds = max(5.0, stale_after_seconds)
         self.poll_interval_seconds = max(10.0, poll_interval_seconds)
-        self.market_is_open = market_is_open or (lambda: True)
+        self.market_is_open = market_is_open or MarketSession().is_open
         self.session_check_interval_seconds = max(0.5, session_check_interval_seconds)
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
