@@ -37,7 +37,7 @@ def test_bootstrap_persists_history_by_source_and_timeframe(tmp_path):
         store=store, adapter=FakeAdapter(), minimum_existing=30, limit=100
     )
     result = bootstrapper.bootstrap_if_needed()
-    assert result["M1"]["status"] == "imported"
+    assert result["M1"]["status"] == "refreshed"
     assert len(store.get_candles("XAUUSD", "M1", 100, source="BiQuote OHLC")) == 40
 
 
