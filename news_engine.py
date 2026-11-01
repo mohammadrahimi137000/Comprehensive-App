@@ -118,6 +118,36 @@ class RssNewsClient:
         }
 
 
+def assess_event_risk(events: list[dict], now: datetime | None = None,
+                      horizon_minutes: int = 15, after_minutes: int = 5) -> dict:
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        raise ValueError("now must be timezone-aware")
+    start = now.timestamp() - after_minutes * 60
+    end = now.timestamp() + horizon_minutes * 60
+    relevant, uncertain = [], []
+    for event in events:
+        if str(event.get("importance", "")).lower() != "high":
+            continue
+        if event.get("time_mode") != "exact":
+            uncertain.append({"name": event.get("name"), "time": event.get("time"),
+                              "reason": "calendar_time_is_not_exact"})
+            continue
+        try:
+            event_time = datetime.fromisoformat(str(event["time"]).replace("Z", "+00:00"))
+            if event_time.tzinfo is not None and start <= event_time.timestamp() <= end:
+                relevant.append({"name": event.get("name"), "time": event.get("time"),
+                                 "country": event.get("country"), "currency": event.get("currency"),
+                                 "importance": "high"})
+        except (KeyError, TypeError, ValueError):
+            continue
+    return {
+        "status": "high_impact_event_window" if relevant else "no_exact_high_impact_event_in_window",
+        "events": relevant, "uncertain_events": uncertain,
+        "window_minutes_before": after_minutes, "window_minutes_after": horizon_minutes,
+        "warning": "Event proximity is a caution flag, not a directional prediction.",
+    }
+
 class BiQuoteContextClient:
     """Official BiQuote market-news and economic-calendar read-only endpoints."""
 
@@ -196,7 +226,8 @@ class BiQuoteContextClient:
             errors.append({"source": "BiQuote economic calendar", "error": f"{type(exc).__name__}: {exc}"})
         return {
             "symbol": symbol.strip().upper(),
-            "news": news, "economic_calendar": events, "errors": errors,
+            "news": news, "economic_calendar": events,
+            "event_risk": assess_event_risk(events), "errors": errors,
             "limitations": [
                 "News headline tone is a keyword heuristic, not a causal market-impact model.",
                 "Calendar actual/forecast values are kept null when unpublished; null is never treated as zero.",
