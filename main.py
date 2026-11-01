@@ -46,6 +46,10 @@ class MainWindow(QMainWindow):
         self.scanner = None
         self.analysis_service = AnalysisService()
         self.trade_journal = TradeJournal(self.analysis_service.store.database_path)
+        self.feed_bridge = FeedBridge()
+        self.feed_bridge.status_changed.connect(self._on_feed_status)
+        self.feed_bridge.quote_received.connect(self._on_feed_quote)
+        self.feed_bridge.reference_received.connect(self._on_reference_result)
         self.current_chart_info = None
         self.market_pipeline = LiveMarketPipeline(store=self.analysis_service.store)
         self.history_bootstrapper = HistoryBootstrapper(
@@ -59,10 +63,6 @@ class MainWindow(QMainWindow):
         self.biquote_context = BiQuoteContextClient()
         self.overlay = ForecastOverlay()
         self.ocr_tesseract_path = ""
-        self.feed_bridge = FeedBridge()
-        self.feed_bridge.status_changed.connect(self._on_feed_status)
-        self.feed_bridge.quote_received.connect(self._on_feed_quote)
-        self.feed_bridge.reference_received.connect(self._on_reference_result)
         self.market_feed = ResilientBiQuoteFeed(
             symbols=("XAUUSD",),
             on_quote=self._on_market_quote,
