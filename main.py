@@ -381,9 +381,11 @@ class MainWindow(QMainWindow):
 
     def _train_ml_model(self):
         try:
-            rows = self.analysis_service.store.get_candles("XAUUSD", "M1", limit=10000, source="BiQuote SignalR")
-            if len(rows) < 180:
-                rows = self.analysis_service.store.get_candles("XAUUSD", "M1", limit=10000)
+            sources = self.analysis_service.store.list_sources("XAUUSD", "M1")
+            source = next((item["source"] for item in sources if item["candle_count"] >= 180), None)
+            rows = self.analysis_service.store.get_candles(
+                "XAUUSD", "M1", limit=10000, source=source
+            )
             metrics = self.ml_model.fit(rows, horizon=15)
             prediction = self.ml_model.predict(rows)
             self.ml_output.setPlainText(json.dumps(
@@ -420,9 +422,7 @@ class MainWindow(QMainWindow):
         origin_x = self.current_chart_info["left"]
         origin_y = self.current_chart_info["top"]
         try:
-            result = self.analysis_service.analyze_latest(
-                "XAUUSD", "M1", source="BiQuote SignalR"
-            )
+            result = self.analysis_service.analyze_latest("XAUUSD", "M1")
             projection = ChartProjection(
                 chart_left=roi["left"], chart_top=roi["top"],
                 chart_right=roi["right"], chart_bottom=roi["bottom"],
