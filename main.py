@@ -9,12 +9,15 @@ from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import (
     QApplication, QFrame, QHBoxLayout, QLabel, QMainWindow, QPushButton,
     QStackedWidget, QVBoxLayout, QWidget, QLineEdit, QComboBox, QPlainTextEdit,
+    QTableWidget, QTableWidgetItem,
 )
 
 from auto_chart_detector import ChartScanner
 from analysis_service import AnalysisService
 from biquote_stream import BiQuoteSignalRClient
 from live_market_pipeline import LiveMarketPipeline
+from trade_journal import TradeJournal
+from screenshot_capture import capture_window_screenshot
 
 
 class FeedBridge(QObject):
@@ -30,6 +33,8 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1050, 680)
         self.scanner = None
         self.analysis_service = AnalysisService()
+        self.trade_journal = TradeJournal(self.analysis_service.store.database_path)
+        self.current_chart_info = None
         self.market_pipeline = LiveMarketPipeline(store=self.analysis_service.store)
         self.feed_bridge = FeedBridge()
         self.feed_bridge.status_changed.connect(self._on_feed_status)
@@ -81,7 +86,7 @@ class MainWindow(QMainWindow):
         menu = [
             "داشبورد اصلی", "تشخیص خودکار چارت", "پیش‌بینی ۱۵ دقیقه آینده",
             "حمایت و مقاومت", "سناریوهای بازار", "تاریخچه پیش‌بینی‌ها",
-            "گزارش عملکرد", "تنظیمات",
+            "گزارش عملکرد", "تنظیمات", "ژورنال معاملات",
         ]
         for index, name in enumerate(menu):
             button = QPushButton(name)
@@ -175,6 +180,53 @@ class MainWindow(QMainWindow):
             self.analysis_output.setReadOnly(True)
             self.analysis_output.setPlaceholderText("نتیجه تحلیل پس از وجود حداقل ۳۰ کندل نمایش داده می‌شود.")
             layout.addWidget(self.analysis_output, 1)
+
+        elif index == 8:
+            note = QLabel("ثبت دستی معاملات برای ژورنال و ارزیابی عملکرد؛ این بخش هیچ سفارشی به کارگزاری ارسال نمی‌کند.")
+            note.setWordWrap(True)
+            note.setObjectName("muted")
+            layout.addWidget(note)
+            row1 = QHBoxLayout()
+            self.journal_symbol = QLineEdit("XAUUSD")
+            self.journal_direction = QComboBox()
+            self.journal_direction.addItems(["long", "short"])
+            self.journal_entry = QLineEdit()
+            self.journal_entry.setPlaceholderText("قیمت ورود")
+            self.journal_stop = QLineEdit()
+            self.journal_stop.setPlaceholderText("حد ضرر")
+            self.journal_target = QLineEdit()
+            self.journal_target.setPlaceholderText("حد سود (اختیاری)")
+            for widget in (self.journal_symbol, self.journal_direction, self.journal_entry, self.journal_stop, self.journal_target):
+                row1.addWidget(widget)
+            layout.addLayout(row1)
+            row2 = QHBoxLayout()
+            self.journal_notes = QLineEdit()
+            self.journal_notes.setPlaceholderText("یادداشت معامله")
+            self.journal_screenshot = QLineEdit()
+            self.journal_screenshot.setReadOnly(True)
+            self.journal_screenshot.setPlaceholderText("مسیر تصویر چارت")
+            capture_button = QPushButton("ذخیره تصویر پنجره چارت")
+            capture_button.clicked.connect(self._capture_journal_screenshot)
+            save_button = QPushButton("ثبت معامله")
+            save_button.clicked.connect(self._save_journal_trade)
+            row2.addWidget(self.journal_notes, 2)
+            row2.addWidget(self.journal_screenshot, 2)
+            row2.addWidget(capture_button)
+            row2.addWidget(save_button)
+            layout.addLayout(row2)
+            close_row = QHBoxLayout()
+            self.journal_exit = QLineEdit()
+            self.journal_exit.setPlaceholderText("قیمت خروج برای معامله انتخاب‌شده")
+            close_button = QPushButton("بستن معامله انتخاب‌شده")
+            close_button.clicked.connect(self._close_journal_trade)
+            close_row.addWidget(self.journal_exit)
+            close_row.addWidget(close_button)
+            layout.addLayout(close_row)
+            self.journal_table = QTableWidget(0, 8)
+            self.journal_table.setHorizontalHeaderLabels(["ID", "نماد", "جهت", "ورود", "حد ضرر", "حد سود", "وضعیت", "R"])
+            self.journal_table.setEditTriggers(self.journal_table.EditTrigger.NoEditTriggers)
+            layout.addWidget(self.journal_table, 1)
+            self._refresh_journal()
         else:
             note = QLabel(
                 "این بخش در نقشه راه قرار دارد. تا اتصال منبع داده معتبر و تکمیل "
@@ -210,6 +262,61 @@ class MainWindow(QMainWindow):
             button.style().polish(button)
 
 
+
+
+    def _refresh_journal(self):
+        if not hasattr(self, "journal_table"):
+            return
+        rows = self.trade_journal.list_trades(limit=200)
+        self.journal_table.setRowCount(len(rows))
+        for row_index, record in enumerate(rows):
+            values = [record["id"], record["symbol"], record["direction"],
+                      record["entry_price"], record["stop_loss"],
+                      record["take_profit"] if record["take_profit"] is not None else "",
+                      record["status"],
+                      record["outcome_r"] if record["outcome_r"] is not None else ""]
+            for column, value in enumerate(values):
+                self.journal_table.setItem(row_index, column, QTableWidgetItem(str(value)))
+
+    def _capture_journal_screenshot(self):
+        if not self.current_chart_info:
+            self.chart_status.setText("ابتدا باید یک پنجره چارت شناسایی شود.")
+            return
+        try:
+            path = capture_window_screenshot(self.current_chart_info["hwnd"])
+            self.journal_screenshot.setText(path)
+        except Exception as exc:
+            self.journal_screenshot.setText(f"خطای تصویر: {exc}")
+
+    def _save_journal_trade(self):
+        try:
+            target_text = self.journal_target.text().strip()
+            self.trade_journal.create_trade(
+                symbol=self.journal_symbol.text(),
+                direction=self.journal_direction.currentText(),
+                entry_price=float(self.journal_entry.text()),
+                stop_loss=float(self.journal_stop.text()),
+                take_profit=float(target_text) if target_text else None,
+                screenshot_path=self.journal_screenshot.text().strip() or None,
+                notes=self.journal_notes.text(),
+            )
+            self._refresh_journal()
+            self.chart_status.setText("معامله در ژورنال محلی ثبت شد.")
+        except Exception as exc:
+            self.chart_status.setText(f"ثبت معامله ناموفق بود: {exc}")
+
+    def _close_journal_trade(self):
+        row = self.journal_table.currentRow()
+        if row < 0:
+            self.chart_status.setText("ابتدا یک معامله را از جدول انتخاب کنید.")
+            return
+        try:
+            trade_id = int(self.journal_table.item(row, 0).text())
+            outcome = self.trade_journal.close_trade(trade_id, float(self.journal_exit.text()))
+            self._refresh_journal()
+            self.chart_status.setText(f"معامله بسته شد؛ نتیجه: {outcome:+.2f}R")
+        except Exception as exc:
+            self.chart_status.setText(f"بستن معامله ناموفق بود: {exc}")
 
     def _start_market_feed(self):
         def connect_feed():
@@ -277,6 +384,7 @@ class MainWindow(QMainWindow):
         self.chart_status.setText(message)
 
     def _on_chart_found(self, info):
+        self.current_chart_info = info
         title = info.get("title", "پنجره ناشناس")
         confidence = info.get("confidence", 0)
         details = (
@@ -296,6 +404,7 @@ class MainWindow(QMainWindow):
         )
 
     def _on_chart_lost(self):
+        self.current_chart_info = None
         self.frame_value.setText("در انتظار")
         self.chart_status.setText("چارت قبلی دیگر در صفحه قابل شناسایی نیست.")
 
