@@ -22,6 +22,7 @@ from chart_vision import extract_candle_geometry
 
 class ChartScanner(QThread):
     chart_found = Signal(dict)
+    charts_updated = Signal(list)
     chart_lost = Signal()
     status_changed = Signal(str)
 
@@ -133,7 +134,7 @@ class ChartScanner(QThread):
         self.status_changed.emit("در حال پایش پنجره‌های قابل مشاهده ویندوز…")
         while not self._stop_event.is_set():
             try:
-                found = None
+                found = []
                 with mss.MSS() as screen:
                     virtual = screen.monitors[0]
                     for window in self.get_visible_windows():
@@ -154,23 +155,26 @@ class ChartScanner(QThread):
                                     "right": region["left"] + roi["right"],
                                     "bottom": region["top"] + roi["bottom"],
                                 }
-                            found = {
+                            found.append({
                                 **window,
                                 "confidence": result["confidence"],
                                 "candle_columns": result["candle_columns"],
                                 "chart_roi_pixels": roi,
                                 "chart_roi_screen": chart_roi_screen,
-                            }
-                            break
+                            })
 
+                self.charts_updated.emit(found)
                 if found:
-                    identity = (found["hwnd"], found["title"])
+                    # EnumWindows returns topmost windows first. Keep that as the
+                    # default selection while exposing every detected candidate.
+                    primary = found[0]
+                    identity = (primary["hwnd"], primary["title"])
                     if identity != self.last_found:
-                        self.chart_found.emit(found)
+                        self.chart_found.emit(primary)
                     self.last_found = identity
+                    names = "، ".join(item["title"] for item in found[:5])
                     self.status_changed.emit(
-                        f"چارت احتمالی شناسایی شد: {found['title']} "
-                        f"(اعتماد بصری {found['confidence']:.0%})"
+                        f"{len(found)} چارت احتمالی شناسایی شد: {names}"
                     )
                 else:
                     if self.last_found is not None:

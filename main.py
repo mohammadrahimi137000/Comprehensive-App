@@ -50,6 +50,7 @@ class MainWindow(QMainWindow):
         self.feed_bridge.quote_received.connect(self._on_feed_quote)
         self.feed_bridge.reference_received.connect(self._on_reference_result)
         self.current_chart_info = None
+        self.detected_charts = {}
         self.latest_accepted_quote = None
         self.market_pipeline = LiveMarketPipeline(store=self.analysis_service.store)
         self.history_bootstrapper = HistoryBootstrapper(
@@ -168,6 +169,10 @@ class MainWindow(QMainWindow):
             )
             panel_layout.addWidget(self.chart_status, 1)
             layout.addWidget(panel, 1)
+            self.chart_selector = QComboBox()
+            self.chart_selector.setPlaceholderText("انتخاب چارت شناسایی‌شده")
+            self.chart_selector.currentIndexChanged.connect(self._select_detected_chart)
+            layout.addWidget(self.chart_selector)
             self.footer = QLabel(
                 "تشخیص بصری چارت فعال است؛ داده قیمت مستقل و تحلیل پژوهشی جداگانه بررسی می‌شوند."
             )
@@ -638,8 +643,50 @@ class MainWindow(QMainWindow):
         self.scanner = ChartScanner(parent=self)
         self.scanner.status_changed.connect(self._on_status)
         self.scanner.chart_found.connect(self._on_chart_found)
+        self.scanner.charts_updated.connect(self._on_charts_updated)
         self.scanner.chart_lost.connect(self._on_chart_lost)
         self.scanner.start()
+
+    def _on_charts_updated(self, charts):
+        self.detected_charts = {int(item["hwnd"]): item for item in charts}
+        if not hasattr(self, "chart_selector"):
+            return
+        selected = self.chart_selector.currentData()
+        target = selected if selected in self.detected_charts else None
+        if target is None and self.current_chart_info:
+            current_hwnd = self.current_chart_info.get("hwnd")
+            if current_hwnd in self.detected_charts:
+                target = current_hwnd
+        if target is None and self.detected_charts:
+            target = next(iter(self.detected_charts))
+        self.chart_selector.blockSignals(True)
+        self.chart_selector.clear()
+        for hwnd, info in self.detected_charts.items():
+            self.chart_selector.addItem(
+                f"{info.get('title', 'پنجره ناشناس')} | اعتماد {info.get('confidence', 0):.0%}",
+                hwnd,
+            )
+        if target is not None:
+            index = self.chart_selector.findData(target)
+            if index >= 0:
+                self.chart_selector.setCurrentIndex(index)
+        self.chart_selector.blockSignals(False)
+        if target is not None and (
+            not self.current_chart_info
+            or self.current_chart_info.get("hwnd") != target
+        ):
+            self._on_chart_found(self.detected_charts[target])
+
+    def _select_detected_chart(self, index):
+        if index < 0 or not hasattr(self, "chart_selector"):
+            return
+        hwnd = self.chart_selector.itemData(index)
+        info = self.detected_charts.get(hwnd)
+        if info and (
+            not self.current_chart_info
+            or self.current_chart_info.get("hwnd") != hwnd
+        ):
+            self._on_chart_found(info)
 
     def _on_status(self, message):
         self.data_value.setText("فعال" if "خطای" not in message else "دارای خطا")
@@ -685,7 +732,7 @@ class MainWindow(QMainWindow):
         self.current_chart_info = None
         self.overlay.clear()
         self.frame_value.setText("در انتظار")
-        self.chart_status.setText("چارت قبلی دیگر در صفحه قابل شناسایی نیست.")
+        self.chart_status.setText("هیچ چارت قابل شناسایی در پنجره‌های قابل مشاهده پیدا نشد.")
 
     def closeEvent(self, event):
         self._closing = True
