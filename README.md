@@ -159,3 +159,15 @@ python -m pytest -q
 - «سناریوهای بازار» امتیاز سناریوها، سوگیری جهت‌دار و ۱۵ نقطه تخمینی را نمایش می‌دهد.
 - «تاریخچه پیش‌بینی‌ها» آخرین snapshotهای ذخیره‌شده در SQLite را بازیابی می‌کند.
 - «گزارش عملکرد» و «ژورنال معاملات» از یک دیتابیس محلی مشترک استفاده می‌کنند.
+
+
+## ساخت فایل اجرایی ویندوز
+
+روی Windows و با نصب Python 3.12، از ریشه پروژه اجرا کنید:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\build_windows.ps1
+```
+
+خروجی پوشه‌ای در `dist/ComprehensiveApp/` ساخته می‌شود. همین build از GitHub Actions نیز با اجرای دستی workflow «Windows executable» یا push کردن tag با الگوی `v*` قابل اجراست. فایل اجرایی هنوز باید روی سیستم مقصد از نظر فید زنده، capture و Overlay آزمایش شود.
