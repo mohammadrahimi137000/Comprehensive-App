@@ -1,9 +1,8 @@
 """Automatic chart-window scanner for Windows.
 
-The scanner detects likely chart windows from visible desktop content. It does not
-read OHLC data, identify symbols/timeframes, or generate trading signals.
-Run this file directly for a console-based detection monitor, or import
-ChartScanner from the main desktop application.
+This is a visual candidate detector, not a market-data or trading-signal engine.
+Only visible desktop pixels can be inspected; covered/minimized windows and
+hardware-accelerated surfaces may not be capturable in every application.
 """
 from __future__ import annotations
 
@@ -34,61 +33,66 @@ class ChartScanner(QThread):
 
     @staticmethod
     def analyze_image(image: np.ndarray) -> dict[str, Any]:
-        """Return a conservative visual-candle heuristic result."""
+        """Detect repeated saturated candle-like columns in a BGR screenshot."""
         empty = {"is_chart": False, "confidence": 0.0, "candle_columns": 0}
         if image is None or image.size == 0 or image.ndim != 3:
             return empty
 
         height, width = image.shape[:2]
-        if width < 300 or height < 180:
+        if width < 300 or height < 180 or image.shape[2] < 3:
             return empty
 
-        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        green = cv2.inRange(hsv, np.array([35, 35, 35]), np.array([95, 255, 255]))
-        red_a = cv2.inRange(hsv, np.array([0, 45, 40]), np.array([12, 255, 255]))
-        red_b = cv2.inRange(hsv, np.array([165, 45, 40]), np.array([180, 255, 255]))
+        hsv = cv2.cvtColor(image[:, :, :3], cv2.COLOR_BGR2HSV)
+
+        # Require both saturation and brightness. Without the V floor, some
+        # dark neutral UI backgrounds fall into OpenCV's red hue interval.
+        green = cv2.inRange(hsv, np.array([35, 65, 65]), np.array([95, 255, 255]))
+        red_a = cv2.inRange(hsv, np.array([0, 70, 65]), np.array([12, 255, 255]))
+        red_b = cv2.inRange(hsv, np.array([165, 70, 65]), np.array([180, 255, 255]))
         mask = cv2.bitwise_or(green, cv2.bitwise_or(red_a, red_b))
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8))
 
-        # Project colored pixels onto the x-axis. This is less sensitive than
-        # contour boxes to a candle body touching its own wick.
-        active = np.count_nonzero(mask, axis=0) >= max(5, int(height * 0.025))
-        columns = []
-        run_start = None
-        previous = None
-        for x, is_active in enumerate(active):
-            if is_active:
-                if run_start is None:
-                    run_start = x
-                previous = x
-            elif run_start is not None:
-                if previous - run_start + 1 <= max(30, int(width * 0.035)):
-                    columns.append((run_start + previous) // 2)
-                run_start = None
-                previous = None
-        if run_start is not None and previous is not None:
-            if previous - run_start + 1 <= max(30, int(width * 0.035)):
-                columns.append((run_start + previous) // 2)
+        # Each candle should create a compact run of colored x-columns. A
+        # minimum vertical pixel count rejects tiny icons and isolated labels.
+        min_vertical_pixels = max(8, int(height * 0.04))
+        active = np.count_nonzero(mask, axis=0) >= min_vertical_pixels
 
-        if len(columns) < 8:
+        runs: list[tuple[int, int]] = []
+        start = None
+        for x, is_active in enumerate(active):
+            if is_active and start is None:
+                start = x
+            elif not is_active and start is not None:
+                runs.append((start, x - 1))
+                start = None
+        if start is not None:
+            runs.append((start, width - 1))
+
+        max_run_width = max(18, int(width * 0.025))
+        candle_runs = [(a, b) for a, b in runs if b - a + 1 <= max_run_width]
+        if len(candle_runs) < 8:
             return empty
 
-        count = len(columns)
-        spread = (columns[-1] - columns[0]) / max(1, width)
-        is_chart = count >= 8 and spread >= 0.18
-        confidence = min(0.95, 0.35 + count / 35) if is_chart else 0.0
+        centers = [(a + b) // 2 for a, b in candle_runs]
+        spread = (centers[-1] - centers[0]) / max(1, width)
+        # Repeated candle-like columns should occupy a meaningful horizontal
+        # portion of the image, rather than one small colored toolbar cluster.
+        if spread < 0.18:
+            return empty
+
+        count = len(centers)
+        confidence = min(0.90, 0.35 + count / 45.0 + spread * 0.15)
         return {
-            "is_chart": is_chart,
+            "is_chart": True,
             "confidence": round(confidence, 2),
             "candle_columns": count,
         }
 
     def detect_candles(self, image: np.ndarray) -> bool:
-        """Backward-compatible boolean detector API."""
         return bool(self.analyze_image(image)["is_chart"])
 
     def get_visible_windows(self) -> list[dict[str, Any]]:
-        windows = []
+        windows: list[dict[str, Any]] = []
 
         def callback(hwnd, _):
             if not win32gui.IsWindowVisible(hwnd) or win32gui.IsIconic(hwnd):
@@ -104,15 +108,9 @@ class ChartScanner(QThread):
                 if right - left < 300 or bottom - top < 180:
                     return
                 windows.append({
-                    "hwnd": int(hwnd),
-                    "title": title,
-                    "process_id": int(pid),
-                    "left": left,
-                    "top": top,
-                    "right": right,
-                    "bottom": bottom,
-                    "width": right - left,
-                    "height": bottom - top,
+                    "hwnd": int(hwnd), "title": title, "process_id": int(pid),
+                    "left": left, "top": top, "right": right, "bottom": bottom,
+                    "width": right - left, "height": bottom - top,
                 })
             except Exception:
                 return
@@ -128,19 +126,13 @@ class ChartScanner(QThread):
         bottom = min(window["bottom"], virtual["top"] + virtual["height"])
         if right - left < 300 or bottom - top < 180:
             return None
-        return {
-            "left": left,
-            "top": top,
-            "width": right - left,
-            "height": bottom - top,
-        }
+        return {"left": left, "top": top, "width": right - left, "height": bottom - top}
 
     def run(self):
         self.status_changed.emit("در حال پایش پنجره‌های قابل مشاهده ویندوز…")
         while not self._stop_event.is_set():
             try:
                 found = None
-                # MSS 10+ exposes the supported context manager as MSS().
                 with mss.MSS() as screen:
                     virtual = screen.monitors[0]
                     for window in self.get_visible_windows():
@@ -171,9 +163,7 @@ class ChartScanner(QThread):
                     if self.last_found is not None:
                         self.chart_lost.emit()
                     self.last_found = None
-                    self.status_changed.emit(
-                        "در حال جست‌وجو؛ هنوز چارت معتبری پیدا نشده است."
-                    )
+                    self.status_changed.emit("در حال جست‌وجو؛ هنوز چارت معتبری پیدا نشده است.")
             except Exception as exc:
                 self.status_changed.emit(f"خطای پایش چارت: {exc}")
             self._stop_event.wait(self.interval_seconds)
@@ -185,14 +175,13 @@ class ChartScanner(QThread):
 
 
 def main() -> int:
-    """Run the detector independently and print status to the terminal."""
     app = QCoreApplication(sys.argv)
     scanner = ChartScanner(interval_seconds=2.0)
     scanner.status_changed.connect(lambda message: print(message, flush=True))
     scanner.chart_found.connect(
         lambda info: print(
-            "CHART FOUND: "
-            f"{info.get('title')} | confidence={info.get('confidence', 0):.0%} | "
+            f"CHART FOUND: {info.get('title')} | "
+            f"confidence={info.get('confidence', 0):.0%} | "
             f"candle-like columns={info.get('candle_columns')}",
             flush=True,
         )
