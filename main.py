@@ -18,6 +18,7 @@ from biquote_stream import BiQuoteSignalRClient
 from live_market_pipeline import LiveMarketPipeline
 from trade_journal import TradeJournal
 from screenshot_capture import capture_window_screenshot
+from performance_engine import analyze_performance
 
 
 class FeedBridge(QObject):
@@ -181,6 +182,19 @@ class MainWindow(QMainWindow):
             self.analysis_output.setPlaceholderText("نتیجه تحلیل پس از وجود حداقل ۳۰ کندل نمایش داده می‌شود.")
             layout.addWidget(self.analysis_output, 1)
 
+
+        elif index == 6:
+            note = QLabel("گزارش فقط بر اساس معاملات بسته‌شده‌ای محاسبه می‌شود که در ژورنال دستی ثبت شده‌اند؛ معیارها بر حسب R هستند.")
+            note.setWordWrap(True)
+            note.setObjectName("muted")
+            layout.addWidget(note)
+            refresh_button = QPushButton("به‌روزرسانی گزارش عملکرد")
+            refresh_button.clicked.connect(self._refresh_performance)
+            layout.addWidget(refresh_button)
+            self.performance_output = QPlainTextEdit()
+            self.performance_output.setReadOnly(True)
+            layout.addWidget(self.performance_output, 1)
+            self._refresh_performance()
         elif index == 8:
             note = QLabel("ثبت دستی معاملات برای ژورنال و ارزیابی عملکرد؛ این بخش هیچ سفارشی به کارگزاری ارسال نمی‌کند.")
             note.setWordWrap(True)
@@ -263,6 +277,15 @@ class MainWindow(QMainWindow):
 
 
 
+
+
+    def _refresh_performance(self):
+        if not hasattr(self, "performance_output"):
+            return
+        result = analyze_performance(self.trade_journal.list_trades(limit=10000))
+        self.performance_output.setPlainText(json.dumps(
+            result, ensure_ascii=False, indent=2
+        ))
 
     def _refresh_journal(self):
         if not hasattr(self, "journal_table"):
