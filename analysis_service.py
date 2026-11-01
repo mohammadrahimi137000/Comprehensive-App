@@ -4,6 +4,7 @@ from __future__ import annotations
 from analysis_engine import AnalysisEngine
 from market_store import MarketStore
 from structure_engine import analyze_structure
+from analysis_brains import analyze_brains
 
 
 class AnalysisService:
@@ -37,6 +38,7 @@ class AnalysisService:
             )
         result = self.engine.analyze(candles)
         result["market_structure"] = analyze_structure(candles)
+        result.update(analyze_brains(candles))
         result["symbol"] = symbol.strip().upper()
         result["timeframe"] = timeframe.strip().upper()
         result["source"] = selected_source
