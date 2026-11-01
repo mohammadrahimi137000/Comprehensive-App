@@ -31,3 +31,14 @@ def test_configured_holiday(tmp_path):
     calendar.write_text('{"closed_dates":["2026-11-02"]}', encoding="utf-8")
     session = MarketSession(holidays_path=calendar)
     assert not session.state(datetime(2026, 11, 2, 12, tzinfo=timezone.utc)).is_open
+
+
+def test_reference_partial_holidays_do_not_close_otc_session(tmp_path):
+    calendar = tmp_path / "holidays.json"
+    calendar.write_text(
+        '{"closed_dates":["2026-12-25"],"reference_events":[{"date":"2026-11-26","effect":"holiday_hours"}]}',
+        encoding="utf-8",
+    )
+    session = MarketSession(holidays_path=calendar)
+    assert session.state(datetime(2026, 11, 26, 15, tzinfo=timezone.utc)).is_open
+    assert not session.state(datetime(2026, 12, 25, 15, tzinfo=timezone.utc)).is_open

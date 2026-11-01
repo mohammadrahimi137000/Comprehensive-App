@@ -7,6 +7,7 @@ from structure_engine import analyze_structure
 from analysis_brains import analyze_brains
 from ml_engine import WalkForwardDirectionModel
 from forecast_validation import evaluate_forecast_history
+from entry_engine import evaluate_entry_readiness
 
 
 def _zone_distance(price: float, zone: dict) -> float:
@@ -29,7 +30,9 @@ class AnalysisService:
                 self.ml_model = WalkForwardDirectionModel()
 
     def analyze_latest(self, symbol: str, timeframe: str = "M1",
-                       source: str | None = None, candle_limit: int = 500) -> dict:
+                       source: str | None = None, candle_limit: int = 500,
+                       live_quote=None, chart_context: dict | None = None,
+                       reference_context: dict | None = None, now=None) -> dict:
         selected_source = source
         if selected_source is None:
             available = self.store.list_sources(symbol, timeframe)
@@ -126,20 +129,15 @@ class AnalysisService:
                 "reason": "No trained model matches this symbol, timeframe and data source.",
             }
 
-        # Historical OHLC cannot prove a fresh quote, chart extraction, spread,
-        # execution conditions or order-book confirmation. Never emit a trade.
-        blockers = [
-            "fresh_live_quote_not_verified",
-            "chart_price_extraction_not_verified",
-            "spread_and_execution_risk_not_verified",
-            "price_action_entry_confirmation_required",
-        ]
-        if confluence["disagreement"] or result["analysis_alignment"]["forecast_vs_confluence_conflict"]:
-            blockers.append("analysis_brains_conflict")
-        result["entry_readiness"] = {
-            "status": "no_trade", "entry_allowed": False, "blockers": blockers,
-            "note": "Research analysis only; this service does not emit a tradable entry signal.",
-        }
+        # Add explicit instrument/timeframe metadata before entry evaluation.
+        result["symbol"] = symbol.strip().upper()
+        result["timeframe"] = timeframe_key
+        result["timeframe_minutes"] = timeframe_minutes
+        result["entry_readiness"] = evaluate_entry_readiness(
+            candles=candles, analysis=result, source=selected_source,
+            live_quote=live_quote, chart_context=chart_context,
+            reference_context=reference_context, now=now,
+        )
         result["forecast_quality"] = {
             "status": "heuristic_unvalidated",
             "probabilities_calibrated": False,

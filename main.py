@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime, timezone
 import threading
 
 import win32gui
@@ -52,6 +53,7 @@ class MainWindow(QMainWindow):
         self.current_chart_info = None
         self.detected_charts = {}
         self.latest_accepted_quote = None
+        self.latest_reference_result = None
         self.market_pipeline = LiveMarketPipeline(store=self.analysis_service.store)
         self.history_bootstrapper = HistoryBootstrapper(
             store=self.analysis_service.store,
@@ -434,6 +436,7 @@ class MainWindow(QMainWindow):
                 image, screen_origin=capture_origin, window_title=info.get("title", ""),
                 tesseract_cmd=self.tesseract_path_input.text().strip(),
             )
+            recognition["captured_at"] = datetime.now(timezone.utc).isoformat()
             info["recognition"] = recognition
             self._try_show_forecast_overlay(recognition)
         except Exception:
@@ -451,7 +454,10 @@ class MainWindow(QMainWindow):
             self.current_chart_info["left"], self.current_chart_info["top"]
         ])[1]
         try:
-            result = self.analysis_service.analyze_latest("XAUUSD", "M1")
+            result = self.analysis_service.analyze_latest(
+                "XAUUSD", "M1", source="broker", live_quote=self.latest_accepted_quote,
+                chart_context=recognition, reference_context=self.latest_reference_result,
+            )
             projection = ChartProjection(
                 chart_left=roi["left"], chart_top=axis["y_at_top"] + origin_y,
                 chart_right=self.current_chart_info["right"] - 70,
@@ -469,7 +475,11 @@ class MainWindow(QMainWindow):
             self.overlay.clear()
 
     def _run_latest_analysis(self):
-        return self.analysis_service.analyze_latest("XAUUSD", "M1")
+        chart_context = (self.current_chart_info or {}).get("recognition")
+        return self.analysis_service.analyze_latest(
+            "XAUUSD", "M1", source="broker", live_quote=self.latest_accepted_quote,
+            chart_context=chart_context, reference_context=self.latest_reference_result,
+        )
 
     def _refresh_structure(self):
         try:
@@ -616,7 +626,8 @@ class MainWindow(QMainWindow):
             ))
 
     def _on_reference_result(self, result):
-        if hasattr(self, "reference_output"):
+        self.latest_reference_result = result
+        if hasattr(self, "reference_output"): 
             self.reference_output.setPlainText(json.dumps(result, ensure_ascii=False, indent=2))
 
     def _run_analysis(self):
@@ -629,8 +640,11 @@ class MainWindow(QMainWindow):
         if source == "همه منابع":
             source = None
         try:
+            chart_context = (self.current_chart_info or {}).get("recognition")
             result = self.analysis_service.analyze_latest(
-                symbol=symbol, timeframe=timeframe, source=source
+                symbol=symbol, timeframe=timeframe, source=source,
+                live_quote=self.latest_accepted_quote, chart_context=chart_context,
+                reference_context=self.latest_reference_result,
             )
             self.analysis_output.setPlainText(json.dumps(
                 result, ensure_ascii=False, indent=2
@@ -708,6 +722,7 @@ class MainWindow(QMainWindow):
             )
         except Exception as exc:
             recognition = {"recognition_warnings": [str(exc)], "symbol": None, "timeframe": None, "calibrated": False}
+        recognition["captured_at"] = datetime.now(timezone.utc).isoformat()
         info["recognition"] = recognition
         symbol = recognition.get("symbol") or "نامشخص"
         timeframe = recognition.get("timeframe") or "نامشخص"

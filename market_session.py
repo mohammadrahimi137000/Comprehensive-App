@@ -20,7 +20,8 @@ class MarketSession:
 
     The default weekly session is Sunday 17:00 through Friday 16:00 New York
     time, with a daily 16:00-17:00 maintenance break. Broker calendars remain
-    authoritative; explicit closed dates can be added to market_holidays.json.
+    authoritative. Only explicit closed_dates are enforced; CME/LBMA reference
+    events are informational because OTC broker holiday hours can differ.
     """
 
     def __init__(self, holidays_path="data/market_holidays.json", clock=None,
