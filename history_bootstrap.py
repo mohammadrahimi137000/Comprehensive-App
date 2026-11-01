@@ -1,4 +1,4 @@
-"""Startup bootstrap and gap repair for completed historical OHLC bars."""
+"""Startup bootstrap and bounded gap refresh for completed historical OHLC bars."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -6,6 +6,7 @@ from typing import Callable
 
 from market_store import MarketStore
 from provider_clients import BiQuoteHistoryAdapter
+from market_session import MarketSession
 
 
 BOOTSTRAP_TIMEFRAMES = ("M1", "M5", "M15", "H1", "H4")
@@ -22,6 +23,7 @@ class HistoryBootstrapper:
         limit: int = 1000,
         on_status: Callable[[str], None] | None = None,
         clock: Callable[[], datetime] | None = None,
+        market_is_open: Callable[[], bool] | None = None,
     ):
         self.store = store or MarketStore()
         self.adapter = adapter or BiQuoteHistoryAdapter()
@@ -29,6 +31,7 @@ class HistoryBootstrapper:
         self.limit = max(100, min(1000, limit))
         self.on_status = on_status
         self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self.market_is_open = market_is_open or MarketSession(clock=self.clock).is_open
 
     def _status(self, message: str):
         if self.on_status:
@@ -47,8 +50,16 @@ class HistoryBootstrapper:
             return True
 
     def bootstrap_if_needed(self, symbol: str = "XAUUSD") -> dict:
+        if not self.market_is_open():
+            self._status("بازار بسته است؛ تاریخچه حفظ شد و هیچ درخواست API ارسال نشد.")
+            return {timeframe: {"status": "market_closed", "count": 0}
+                    for timeframe in BOOTSTRAP_TIMEFRAMES}
+
         result = {}
         for timeframe in BOOTSTRAP_TIMEFRAMES:
+            if not self.market_is_open():
+                result[timeframe] = {"status": "market_closed", "count": 0}
+                continue
             existing = self.store.get_candles(
                 symbol, timeframe, limit=self.minimum_existing,
                 source=self.adapter.name,
