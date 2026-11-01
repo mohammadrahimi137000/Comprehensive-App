@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication, QFrame, QHBoxLayout, QLabel, QMainWindow, QPushButton,
@@ -54,17 +55,18 @@ class MainWindow(QMainWindow):
 
         self.pages = QStackedWidget()
         self.nav_buttons = []
-        menu = ["داشبورد اصلی", "تشخیص خودکار چارت", "پیش‌بینی ۱۵ دقیقه آینده",
-                "حمایت و مقاومت", "سناریوهای بازار", "تاریخچه پیش‌بینی‌ها",
-                "گزارش عملکرد", "تنظیمات"]
+        menu = [
+            "داشبورد اصلی", "تشخیص خودکار چارت", "پیش‌بینی ۱۵ دقیقه آینده",
+            "حمایت و مقاومت", "سناریوهای بازار", "تاریخچه پیش‌بینی‌ها",
+            "گزارش عملکرد", "تنظیمات",
+        ]
         for index, name in enumerate(menu):
             button = QPushButton(name)
             button.setProperty("active", index == 0)
             button.clicked.connect(lambda checked=False, i=index: self._show_page(i))
             side.addWidget(button)
             self.nav_buttons.append(button)
-            page = self._make_page(name, index)
-            self.pages.addWidget(page)
+            self.pages.addWidget(self._make_page(name, index))
         side.addStretch()
         version = QLabel("نسخه پایه توسعه | 1.1")
         version.setObjectName("muted")
@@ -85,7 +87,9 @@ class MainWindow(QMainWindow):
         title.setObjectName("heading")
         layout.addWidget(title)
         if index == 0:
-            description = QLabel("پایش خودکار پنجره‌های معاملاتی و آماده‌سازی زیرساخت تحلیل بازار")
+            description = QLabel(
+                "پایش خودکار پنجره‌های معاملاتی و آماده‌سازی زیرساخت تحلیل بازار"
+            )
             description.setObjectName("muted")
             layout.addWidget(description)
             cards = QHBoxLayout()
@@ -99,14 +103,21 @@ class MainWindow(QMainWindow):
             self.chart_status = QLabel("موتور تشخیص در حال شروع است…")
             self.chart_status.setWordWrap(True)
             self.chart_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.chart_status.setStyleSheet("font-size:17px;color:#94a3b8;padding:30px;")
+            self.chart_status.setStyleSheet(
+                "font-size:17px;color:#94a3b8;padding:30px;"
+            )
             panel_layout.addWidget(self.chart_status, 1)
             layout.addWidget(panel, 1)
-            self.footer = QLabel("تشخیص بصری چارت فعال می‌شود؛ هنوز داده قیمت یا تحلیل معاملاتی متصل نیست.")
+            self.footer = QLabel(
+                "تشخیص بصری چارت فعال می‌شود؛ هنوز داده قیمت یا تحلیل معاملاتی متصل نیست."
+            )
             self.footer.setObjectName("muted")
             layout.addWidget(self.footer)
         elif index == 1:
-            info = QLabel("این بخش پنجره‌های قابل مشاهده را به‌صورت خودکار پایش می‌کند. نتیجه فعلی فقط تشخیص بصری احتمالی است.")
+            info = QLabel(
+                "این بخش پنجره‌های قابل مشاهده را به‌صورت خودکار پایش می‌کند. "
+                "نتیجه فعلی فقط تشخیص بصری احتمالی است."
+            )
             info.setWordWrap(True)
             info.setObjectName("muted")
             layout.addWidget(info)
@@ -116,7 +127,10 @@ class MainWindow(QMainWindow):
             self.detector_result.setStyleSheet("padding:24px;font-size:16px;")
             layout.addWidget(self.detector_result)
         else:
-            note = QLabel("این بخش در نقشه راه قرار دارد و تا اتصال داده بازار و موتور تحلیل، خروجی معاملاتی تولید نمی‌کند.")
+            note = QLabel(
+                "این بخش در نقشه راه قرار دارد و تا اتصال داده بازار و موتور تحلیل، "
+                "خروجی معاملاتی تولید نمی‌کند."
+            )
             note.setWordWrap(True)
             note.setObjectName("muted")
             layout.addWidget(note)
@@ -147,7 +161,8 @@ class MainWindow(QMainWindow):
             button.style().polish(button)
 
     def _start_scanner(self):
-        self.scanner = ChartScanner(self)
+        # The first positional parameter is the scan interval, not the Qt parent.
+        self.scanner = ChartScanner(parent=self)
         self.scanner.status_changed.connect(self._on_status)
         self.scanner.chart_found.connect(self._on_chart_found)
         self.scanner.chart_lost.connect(self._on_chart_lost)
@@ -160,12 +175,21 @@ class MainWindow(QMainWindow):
     def _on_chart_found(self, info):
         title = info.get("title", "پنجره ناشناس")
         confidence = info.get("confidence", 0)
-        details = f"{title}\nشناسه پنجره: {info.get('hwnd')} | PID: {info.get('process_id')}\nاعتماد بصری: {confidence:.0%} | ستون‌های شبیه کندل: {info.get('candle_columns')}"
+        details = (
+            f"{title}\nشناسه پنجره: {info.get('hwnd')} | "
+            f"PID: {info.get('process_id')}\n"
+            f"اعتماد بصری: {confidence:.0%} | "
+            f"ستون‌های شبیه کندل: {info.get('candle_columns')}"
+        )
         self.frame_value.setText(title)
         self.symbol_value.setText("از روی تصویر قابل تأیید نیست")
-        self.chart_status.setText("چارت احتمالی شناسایی شد. این نتیجه هنوز تأیید نماد یا سیگنال نیست.")
+        self.chart_status.setText(
+            "چارت احتمالی شناسایی شد. این نتیجه هنوز تأیید نماد یا سیگنال نیست."
+        )
         self.detector_result.setText(details)
-        self.footer.setText("پنجره پیدا شد؛ استخراج قیمت، تایم‌فریم و تولید پیش‌بینی هنوز پیاده‌سازی نشده است.")
+        self.footer.setText(
+            "پنجره پیدا شد؛ استخراج قیمت، تایم‌فریم و تولید پیش‌بینی هنوز پیاده‌سازی نشده است."
+        )
 
     def _on_chart_lost(self):
         self.frame_value.setText("در انتظار")
