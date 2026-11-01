@@ -65,3 +65,20 @@ def test_corgano_rejects_stale_data_and_missing_attribution_url():
 def test_corgano_cannot_be_configured_to_exceed_safe_poll_rate():
     with pytest.raises(ValueError):
         CorganoSpotAdapter(minimum_interval_seconds=30)
+
+
+def test_corgano_html_attribution_is_extracted():
+    official_shape = {
+        "data": {"as_of": "2026-11-01T11:59:00Z", "price_usd": {"per_oz": 4000.25}},
+        "attribution": {
+            "required": True,
+            "html": '<a href="https://goldprice.corgano.com/">Gold price data by Corgano</a>',
+        },
+    }
+    adapter = CorganoSpotAdapter(
+        getter=lambda url, timeout: official_shape,
+        clock=lambda: BASE,
+    )
+    result = adapter.get_spot()
+    assert result.attribution_url == "https://goldprice.corgano.com/"
+    assert result.attribution_text == "Gold price data by Corgano"
