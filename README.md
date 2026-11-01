@@ -5,13 +5,13 @@
 ## قابلیت‌های پیاده‌سازی‌شده در شاخه توسعه
 
 - پایش خودکار پنجره‌های قابل مشاهده ویندوز و تشخیص احتمالی نمودار با OpenCV.
-- استخراج ROI و مختصات پیکسلی کندل‌های رنگی؛ مختصات صفحه برای توسعه Overlay.
+- استخراج ROI و هندسه کندل؛ OCR اختیاری برای نماد/تایم‌فریم و قیمت‌های محور، تبدیل پیکسل به OHLC تخمینی فقط پس از کالیبراسیون.
 - اتصال SignalR به BiQuote برای تیک XAUUSD؛ ذخیره کندل‌های کامل M1/M5/M10/M15/H1/H4 در SQLite.
 - اعتبارسنجی تازگی و کیفیت Quote؛ رد داده قدیمی، شبیه‌سازی‌شده یا نامعتبر.
-- کلاینت‌های مرجع Spot برای XAUS و Corgano، با حفظ تفکیک Spot از Bid/Ask بروکر و رعایت محدودیت درخواست.
-- موتور پایه EMA/RSI/ATR/مومنتوم، زون‌های حمایت/مقاومت استاتیک، خطوط داینامیک و سناریوهای تخمینی ۱۵ دقیقه‌ای.
+- SignalR با fallback محدود REST؛ bootstrap تاریخچه OHLC بسته‌شده از BiQuote؛ پایش مرجع XAUS/Corgano فقط هنگام وجود Quote بروکر تازه و بدون جایگزینی Bid/Ask.
+- مغزهای مستقل تکنیکال، پرایس‌اکشن، آمار نوسان و proxy نقدینگی؛ زون‌های حمایت/مقاومت و سناریوهای ۱۵ دقیقه‌ای.
 - ذخیره snapshot پیش‌بینی‌ها، ژورنال دستی، ذخیره تصویر پنجره چارت و گزارش عملکرد بر حسب R.
-- Overlay شفاف و mouse-through و projection قیمت به پیکسل به‌عنوان زیرساخت؛ نمایش فقط پس از کالیبراسیون معتبر مجاز است.
+- Overlay شفاف و mouse-through با بازکالیبراسیون دوره‌ای؛ فقط در صورت تشخیص XAUUSD/M1، OCR محور قیمت و فاصله‌گذاری منظم کندل‌ها.
 
 ## نصب و اجرا (Windows 10/11)
 
@@ -47,11 +47,11 @@ python -m pytest -q
 
 - `main.py`: داشبورد و اتصال موتورهای برنامه
 - `auto_chart_detector.py`, `chart_vision.py`: شناسایی پنجره و هندسه پیکسلی نمودار
-- `biquote_stream.py`, `provider_clients.py`, `feed_router.py`: منابع و اعتبارسنجی داده
-- `candle_builder.py`, `live_market_pipeline.py`, `market_store.py`: ساخت و ذخیره کندل
-- `analysis_engine.py`, `structure_engine.py`, `analysis_service.py`: تحلیل و سناریو
-- `chart_projection.py`, `forecast_overlay.py`: زیرساخت نگاشت و Overlay
-- `trade_journal.py`, `performance_engine.py`: ژورنال و گزارش
+- `biquote_stream.py`, `resilient_feed.py`, `provider_clients.py`, `feed_router.py`, `reference_monitor.py`: منابع و اعتبارسنجی داده
+- `candle_builder.py`, `live_market_pipeline.py`, `history_bootstrap.py`, `market_store.py`: ساخت و ذخیره کندل
+- `analysis_engine.py`, `analysis_brains.py`, `structure_engine.py`, `analysis_service.py`: تحلیل و سناریو
+- `chart_recognition.py`, `chart_projection.py`, `forecast_overlay.py`: OCR، نگاشت و Overlay
+- `trade_journal.py`, `performance_engine.py`, `ml_engine.py`, `tick_flow.py`, `news_engine.py`: ژورنال، ML، فشار تیک و خبر
 - `tests/`: تست‌های خودکار
 
 ## حریم خصوصی
