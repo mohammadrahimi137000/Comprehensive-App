@@ -383,6 +383,8 @@ class MainWindow(QMainWindow):
         try:
             sources = self.analysis_service.store.list_sources("XAUUSD", "M1")
             source = next((item["source"] for item in sources if item["candle_count"] >= 180), None)
+            if source is None:
+                raise ValueError("حداقل ۱۸۰ کندل از یک منبع مستقل برای آموزش ML لازم است.")
             rows = self.analysis_service.store.get_candles(
                 "XAUUSD", "M1", limit=10000, source=source
             )
