@@ -27,11 +27,13 @@ from forecast_overlay import ForecastOverlay
 from ml_engine import WalkForwardDirectionModel
 from tick_flow import TickPressure
 from news_engine import RssNewsClient
+from reference_monitor import SpotReferenceMonitor
 
 
 class FeedBridge(QObject):
     status_changed = Signal(str)
     quote_received = Signal(object)
+    reference_received = Signal(object)
 
 
 class MainWindow(QMainWindow):
@@ -54,9 +56,15 @@ class MainWindow(QMainWindow):
         self.feed_bridge = FeedBridge()
         self.feed_bridge.status_changed.connect(self._on_feed_status)
         self.feed_bridge.quote_received.connect(self._on_feed_quote)
+        self.feed_bridge.reference_received.connect(self._on_reference_result)
         self.market_feed = BiQuoteSignalRClient(
             symbols=("XAUUSD",),
             on_quote=self._on_market_quote,
+            on_status=self.feed_bridge.status_changed.emit,
+        )
+        self.reference_monitor = SpotReferenceMonitor(
+            latest_broker_quote=lambda: self.market_feed.get_latest_quote("XAUUSD"),
+            on_result=self.feed_bridge.reference_received.emit,
             on_status=self.feed_bridge.status_changed.emit,
         )
         self.feed_thread = None
@@ -64,6 +72,9 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._start_scanner()
         self._start_market_feed()
+        self.overlay_timer = QTimer(self)
+        self.overlay_timer.timeout.connect(self._refresh_current_overlay)
+        self.overlay_timer.start(60_000)
 
     def _build_ui(self):
         self.setStyleSheet("""
@@ -319,6 +330,11 @@ class MainWindow(QMainWindow):
             self.flow_output.setMaximumHeight(130)
             self.flow_output.setPlainText(json.dumps(self.latest_tick_pressure, ensure_ascii=False, indent=2))
             layout.addWidget(self.flow_output)
+            self.reference_output = QPlainTextEdit()
+            self.reference_output.setReadOnly(True)
+            self.reference_output.setMaximumHeight(180)
+            self.reference_output.setPlaceholderText("اختلاف قیمت Spot مستقل با Mid بروکر؛ با attribution منبع")
+            layout.addWidget(self.reference_output)
         layout.addStretch(1)
         return page
 
@@ -368,6 +384,10 @@ class MainWindow(QMainWindow):
         url = self.news_url_input.text().strip()
         result = self.news_client.fetch([url] if url else None)
         self.news_output.setPlainText(json.dumps(result, ensure_ascii=False, indent=2))
+
+    def _refresh_current_overlay(self):
+        if self.current_chart_info and self.current_chart_info.get("recognition"):
+            self._try_show_forecast_overlay(self.current_chart_info["recognition"])
 
     def _try_show_forecast_overlay(self, recognition: dict):
         self.overlay.clear()
@@ -501,6 +521,8 @@ class MainWindow(QMainWindow):
                 self.market_feed.start()
                 if self._closing:
                     self.market_feed.stop()
+                else:
+                    self.reference_monitor.start()
             except Exception as exc:
                 self.feed_bridge.status_changed.emit(
                     f"اتصال فید ناموفق بود: {type(exc).__name__}: {exc}"
@@ -533,6 +555,10 @@ class MainWindow(QMainWindow):
             self.flow_output.setPlainText(json.dumps(
                 self.latest_tick_pressure, ensure_ascii=False, indent=2
             ))
+
+    def _on_reference_result(self, result):
+        if hasattr(self, "reference_output"):
+            self.reference_output.setPlainText(json.dumps(result, ensure_ascii=False, indent=2))
 
     def _run_analysis(self):
         symbol = self.analysis_symbol.text().strip()
@@ -610,6 +636,9 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self._closing = True
+        if hasattr(self, "overlay_timer"):
+            self.overlay_timer.stop()
+        self.reference_monitor.stop()
         if self.scanner is not None:
             self.scanner.stop()
         self.overlay.clear()
