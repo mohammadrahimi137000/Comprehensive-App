@@ -56,7 +56,7 @@ class SpotReferenceMonitor:
 
     def _run(self):
         self._status("مقایسه قیمت مرجع مستقل آماده است؛ تا دریافت تیک زنده هیچ درخواست Spot ارسال نمی‌شود.")
-        while not self._stop.wait(5.0):
+        while not self._stop.wait(1.0):
             now = self.clock()
             quote = self.latest_broker_quote()
             if quote is None or (now - quote.timestamp).total_seconds() > self.broker_max_age_seconds:
