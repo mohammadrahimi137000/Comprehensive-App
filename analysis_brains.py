@@ -100,9 +100,14 @@ def analyze_brains(values: list[dict]) -> dict:
     closes_for_ema = [item.close for item in candles]
     fast = _ema(closes_for_ema[-30:], 8)
     slow = _ema(closes_for_ema[-60:], 24)
-    rsi_gain = mean([max(b.close - a.close, 0) for a, b in zip(candles[-15:], candles[-14:])])
-    rsi_loss = mean([max(a.close - b.close, 0) for a, b in zip(candles[-15:], candles[-14:])])
-    rsi = 100 - 100 / (1 + rsi_gain / max(rsi_loss, 1e-9))
+    # Use all fourteen completed close-to-close changes, not only the final pair.
+    changes = [b.close - a.close for a, b in zip(candles[-15:], candles[-14:])]
+    rsi_gain = mean([max(change, 0.0) for change in changes])
+    rsi_loss = mean([max(-change, 0.0) for change in changes])
+    if rsi_loss == 0:
+        rsi = 100.0 if rsi_gain > 0 else 50.0
+    else:
+        rsi = 100.0 - 100.0 / (1.0 + rsi_gain / rsi_loss)
     technical_score = _clamp((1 if fast > slow else -1 if fast < slow else 0) * 0.65
                              + _clamp((rsi - 50) / 40) * 0.35)
     technical = {
