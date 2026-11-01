@@ -28,7 +28,7 @@ def make_inputs(now=None):
         "calibrated": True, "symbol": "XAUUSD", "timeframe_minutes": 1,
         "captured_at": now.isoformat(),
     }
-    reference = {"status": "compared", "comparisons": [{"broker_minus_reference_bps": 2.5}]}
+    reference = {"status": "compared", "checked_at": now.isoformat(), "comparisons": [{"broker_minus_reference_bps": 2.5}]}
     return candles, analysis, quote, chart, reference, now
 
 
@@ -98,3 +98,21 @@ def test_reference_divergence_blocks_entry():
     reference["comparisons"][0]["broker_minus_reference_bps"] = 60
     result = evaluate((candles, analysis, quote, chart, reference, now))
     assert "broker_spot_deviation_too_large" in result["blockers"]
+
+
+def test_stale_independent_reference_blocks_entry():
+    inputs = make_inputs()
+    candles, analysis, quote, chart, reference, now = inputs
+    reference["checked_at"] = (now - timedelta(seconds=240)).isoformat()
+    result = evaluate((candles, analysis, quote, chart, reference, now))
+    assert "independent_spot_reference_stale" in result["blockers"]
+
+
+def test_spread_relative_to_atr_blocks_entry():
+    inputs = make_inputs()
+    candles, analysis, quote, chart, reference, now = inputs
+    analysis["market_structure"]["atr"] = 0.2
+    quote["bid"] = 101.5
+    quote["ask"] = 101.9
+    result = evaluate((candles, analysis, quote, chart, reference, now))
+    assert "spread_too_large_relative_to_atr" in result["blockers"]

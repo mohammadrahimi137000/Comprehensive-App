@@ -101,6 +101,18 @@ def evaluate_entry_readiness(
     if not isinstance(reference_context, dict) or reference_context.get("status") != "compared":
         blockers.append("independent_spot_reference_not_verified")
     else:
+        try:
+            reference_checked = datetime.fromisoformat(
+                str(reference_context.get("checked_at")).replace("Z", "+00:00")
+            )
+            if reference_checked.tzinfo is None:
+                raise ValueError
+            reference_age = (now - reference_checked.astimezone(timezone.utc)).total_seconds()
+            details["reference_age_seconds"] = round(reference_age, 3)
+            if reference_age < -2 or reference_age > 180:
+                blockers.append("independent_spot_reference_stale")
+        except (TypeError, ValueError):
+            blockers.append("independent_spot_reference_timestamp_invalid")
         comparisons = reference_context.get("comparisons") or []
         deviations = []
         for item in comparisons:
@@ -150,6 +162,14 @@ def evaluate_entry_readiness(
         blockers.append("directional_score_below_threshold")
 
     structure = analysis.get("market_structure") or {}
+    atr_for_quality = float(structure.get("atr") or 0)
+    spread_value = details.get("spread")
+    if spread_value is not None and atr_for_quality > 0 and spread_value > atr_for_quality * 0.20:
+        blockers.append("spread_too_large_relative_to_atr")
+    if quote is not None and atr_for_quality > 0 and bid > 0 and ask > 0:
+        quote_mid = (bid + ask) / 2.0
+        if abs(quote_mid - close) > max(atr_for_quality * 1.5, max_spread):
+            blockers.append("live_quote_diverges_from_last_completed_candle")
     if bias == "bullish":
         confirmed, direction = close > open_price and close > previous_high, "long"
         entry = ask
