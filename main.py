@@ -348,6 +348,9 @@ class MainWindow(QMainWindow):
             self.reference_output.setMaximumHeight(180)
             self.reference_output.setPlaceholderText("اختلاف قیمت Spot مستقل با Mid بروکر؛ با attribution منبع")
             layout.addWidget(self.reference_output)
+            self.corgano_credit = QLabel('<a href="https://goldprice.corgano.com/">Gold price data by Corgano</a>')
+            self.corgano_credit.setOpenExternalLinks(True)
+            layout.addWidget(self.corgano_credit)
         layout.addStretch(1)
         return page
 
