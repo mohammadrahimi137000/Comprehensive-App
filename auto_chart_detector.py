@@ -47,23 +47,28 @@ class ChartScanner(QThread):
         mask = cv2.bitwise_or(green, cv2.bitwise_or(red_a, red_b))
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8))
 
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        centers = []
-        for contour in contours:
-            x, y, w, h = cv2.boundingRect(contour)
-            if 2 <= w <= max(25, int(width * 0.025)) and 5 <= h <= int(height * 0.70):
-                centers.append(x + w // 2)
-
-        if len(centers) < 8:
-            return empty
-
-        centers.sort()
+        # Project colored pixels onto the x-axis. This is less sensitive than
+        # contour boxes to a candle body touching its own wick.
+        active = np.count_nonzero(mask, axis=0) >= max(5, int(height * 0.025))
         columns = []
-        for x in centers:
-            if not columns or x - columns[-1] > 4:
-                columns.append(x)
-            else:
-                columns[-1] = int((columns[-1] + x) / 2)
+        run_start = None
+        previous = None
+        for x, is_active in enumerate(active):
+            if is_active:
+                if run_start is None:
+                    run_start = x
+                previous = x
+            elif run_start is not None:
+                if previous - run_start + 1 <= max(30, int(width * 0.035)):
+                    columns.append((run_start + previous) // 2)
+                run_start = None
+                previous = None
+        if run_start is not None and previous is not None:
+            if previous - run_start + 1 <= max(30, int(width * 0.035)):
+                columns.append((run_start + previous) // 2)
+
+        if len(columns) < 8:
+            return empty
 
         count = len(columns)
         # Require a meaningful horizontal spread to reduce UI/icon false positives.
