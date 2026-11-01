@@ -150,7 +150,8 @@ class CorganoSpotAdapter:
             "https://goldprice.corgano.com/api/v1/latest", self.timeout
         )
         data = payload.get("data") or {}
-        timestamp = _parse_timestamp(str(data.get("as_of", "")))
+        timestamp_value = data.get("as_of") or payload.get("price_as_of") or payload.get("updated_at")
+        timestamp = _parse_timestamp(str(timestamp_value or ""))
         age = (now.astimezone(timezone.utc) - timestamp).total_seconds()
         if age < -2 or age > self.max_age_seconds:
             raise RuntimeError(f"Corgano spot is outside freshness limit (age={age:.1f}s)")
