@@ -4,3 +4,4 @@ mss>=9,<11
 numpy>=1.26,<3
 pywin32>=306; platform_system == "Windows"
 pytest>=8,<9
+signalrcore>=0.9,<1
