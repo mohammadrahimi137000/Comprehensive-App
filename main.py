@@ -573,6 +573,8 @@ class MainWindow(QMainWindow):
                     self.market_feed.stop()
                 else:
                     self.reference_monitor.start()
+                    if self._closing:
+                        self.reference_monitor.stop()
             except Exception as exc:
                 self.feed_bridge.status_changed.emit(
                     f"اتصال فید ناموفق بود: {type(exc).__name__}: {exc}"
