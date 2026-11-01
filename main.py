@@ -169,7 +169,7 @@ class MainWindow(QMainWindow):
             panel_layout.addWidget(self.chart_status, 1)
             layout.addWidget(panel, 1)
             self.footer = QLabel(
-                "تشخیص بصری چارت فعال می‌شود؛ هنوز داده قیمت یا تحلیل معاملاتی متصل نیست."
+                "تشخیص بصری چارت فعال است؛ داده قیمت مستقل و تحلیل پژوهشی جداگانه بررسی می‌شوند."
             )
             self.footer.setObjectName("muted")
             layout.addWidget(self.footer)
@@ -188,8 +188,8 @@ class MainWindow(QMainWindow):
             layout.addWidget(self.detector_result)
         elif index == 2:
             note = QLabel(
-                "تحلیل فقط روی کندل‌های ذخیره‌شده و معتبر اجرا می‌شود. "
-                "در این نسخه هنوز فید زنده متصل نیست و خروجی، سیگنال آماده معامله نیست."
+                "تحلیل روی کندل‌های کامل ذخیره‌شده اجرا می‌شود؛ فید زنده و مرجع‌های مستقل "
+                "به‌صورت جداگانه پایش می‌شوند. خروجی پژوهشی است و سیگنال آماده معامله نیست."
             )
             note.setWordWrap(True)
             note.setObjectName("muted")

@@ -31,6 +31,21 @@ def test_forecast_has_15_ordered_points_and_normalized_scenarios():
     assert result["status"] == "research_only"
 
 
+def test_forecast_points_follow_input_timeframe():
+    candles = sample_candles()
+    m5 = AnalysisEngine().analyze(candles, timeframe_minutes=5)
+    m15 = AnalysisEngine().analyze(candles, timeframe_minutes=15)
+    assert [p["minute"] for p in m5["forecast_points"]] == [5, 10, 15]
+    assert [p["minute"] for p in m15["forecast_points"]] == [15]
+    assert m5["forecast_horizon_minutes"] == 15
+    assert m15["input_timeframe_minutes"] == 15
+
+
+def test_rejects_invalid_timeframe_minutes():
+    with pytest.raises(ValueError, match="positive"):
+        AnalysisEngine().analyze(sample_candles(), timeframe_minutes=0)
+
+
 def test_rejects_insufficient_history():
     with pytest.raises(ValueError, match="30"):
         AnalysisEngine().analyze(sample_candles(29))

@@ -29,6 +29,26 @@ def test_service_analyzes_and_persists_latest_candles(tmp_path):
     assert saved[0]["payload"]["symbol"] == "XAUUSD"
 
 
+def test_service_maps_broker_and_spot_aliases_to_real_sources(tmp_path):
+    store = MarketStore(tmp_path / "market.db")
+    store.upsert_candles("BiQuote OHLC", "XAUUSD", "M1", rows(50))
+    spot_rows = rows(50)
+    spot_rows[-1]["timestamp"] = 999
+    store.upsert_candles("XAUS spot reference", "XAUUSD", "M1", spot_rows)
+
+    broker = AnalysisService(store=store).analyze_latest("XAUUSD", "M1", "broker")
+    spot = AnalysisService(store=store).analyze_latest("XAUUSD", "M1", "spot")
+    assert broker["source"] == "BiQuote OHLC"
+    assert spot["source"] == "XAUS spot reference"
+
+
+def test_service_uses_timeframe_aware_forecast(tmp_path):
+    store = MarketStore(tmp_path / "market.db")
+    store.upsert_candles("BiQuote OHLC", "XAUUSD", "M5", rows(50))
+    result = AnalysisService(store=store).analyze_latest("XAUUSD", "M5")
+    assert [point["minute"] for point in result["forecast_points"]] == [5, 10, 15]
+
+
 def test_service_explains_missing_history(tmp_path):
     store = MarketStore(tmp_path / "market.db")
     store.upsert_candles("spot", "XAUUSD", "M1", rows(10))

@@ -109,7 +109,14 @@ class AnalysisEngine:
             raise ValueError("horizon_minutes must be between 1 and 60")
         self.horizon_minutes = int(horizon_minutes)
 
-    def analyze(self, values: Iterable[Candle | Mapping[str, object] | Sequence[object]]) -> dict:
+    def analyze(
+        self,
+        values: Iterable[Candle | Mapping[str, object] | Sequence[object]],
+        timeframe_minutes: int = 1,
+    ) -> dict:
+        timeframe_minutes = int(timeframe_minutes)
+        if timeframe_minutes < 1:
+            raise ValueError("timeframe_minutes must be positive")
         candles = [Candle.from_value(value) for value in values]
         if len(candles) < 30:
             raise ValueError("At least 30 completed candles are required")
@@ -140,12 +147,17 @@ class AnalysisEngine:
 
         direction = 1 if probabilities["bullish"] >= probabilities["bearish"] else -1
         points = []
-        for minute in range(1, self.horizon_minutes + 1):
-            decay = 1.0 - 0.55 * (minute / self.horizon_minutes)
-            drift = score * atr * 0.10 * minute * decay
-            uncertainty = atr * (0.35 * minute ** 0.5)
+        # Forecast points are spaced by the input candle interval. A 15-minute
+        # horizon therefore yields 15 points on M1, 3 on M5 and 1 on M15.
+        steps = max(1, (self.horizon_minutes + timeframe_minutes - 1) // timeframe_minutes)
+        effective_horizon = steps * timeframe_minutes
+        for step in range(1, steps + 1):
+            elapsed_minutes = step * timeframe_minutes
+            decay = 1.0 - 0.55 * (step / steps)
+            drift = score * atr * 0.10 * step * decay
+            uncertainty = atr * (0.35 * step ** 0.5)
             points.append({
-                "minute": minute,
+                "minute": elapsed_minutes,
                 "mid": round(last.close + drift, 6),
                 "low": round(last.close + drift - uncertainty, 6),
                 "high": round(last.close + drift + uncertainty, 6),
@@ -160,6 +172,8 @@ class AnalysisEngine:
             "symbol": None,
             "timeframe": None,
             "last_close": last.close,
+            "input_timeframe_minutes": timeframe_minutes,
+            "forecast_horizon_minutes": effective_horizon,
             "indicators": {
                 "ema_fast": round(ema_fast, 6), "ema_slow": round(ema_slow, 6),
                 "rsi_14": round(rsi, 2), "atr_14": round(atr, 6),

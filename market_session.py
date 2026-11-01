@@ -5,6 +5,7 @@ import os
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 @dataclass(frozen=True)
@@ -15,16 +16,40 @@ class SessionState:
 
 
 class MarketSession:
-    """Configurable UTC gold-session guard; broker calendars remain authoritative."""
+    """DST-aware gold session guard using New York market time by default.
+
+    The default weekly session is Sunday 17:00 through Friday 16:00 New York
+    time, with a daily 16:00-17:00 maintenance break. Broker calendars remain
+    authoritative; explicit closed dates can be added to market_holidays.json.
+    """
 
     def __init__(self, holidays_path="data/market_holidays.json", clock=None,
-                 open_hour=None, close_hour=None):
+                 open_hour=None, close_hour=None, timezone_name=None):
         self.holidays_path = Path(holidays_path)
         self.clock = clock or (lambda: datetime.now(timezone.utc))
-        self.open_hour = int(os.getenv("GOLD_SESSION_OPEN_UTC", open_hour if open_hour is not None else 22))
-        self.close_hour = int(os.getenv("GOLD_SESSION_CLOSE_UTC", close_hour if close_hour is not None else 21))
+        legacy_open = os.getenv("GOLD_SESSION_OPEN_UTC")
+        legacy_close = os.getenv("GOLD_SESSION_CLOSE_UTC")
+        if legacy_open is not None or legacy_close is not None:
+            timezone_name = "UTC"
+        self.timezone_name = timezone_name or os.getenv(
+            "GOLD_SESSION_TIMEZONE", "America/New_York"
+        )
+        try:
+            self.session_timezone = ZoneInfo(self.timezone_name)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError(f"Unknown market timezone: {self.timezone_name}") from exc
+        self.open_hour = int(
+            legacy_open if legacy_open is not None else
+            os.getenv("GOLD_SESSION_OPEN_HOUR", open_hour if open_hour is not None else 17)
+        )
+        self.close_hour = int(
+            legacy_close if legacy_close is not None else
+            os.getenv("GOLD_SESSION_CLOSE_HOUR", close_hour if close_hour is not None else 16)
+        )
         if not 0 <= self.open_hour <= 23 or not 0 <= self.close_hour <= 23:
             raise ValueError("Session hours must be between 0 and 23")
+        if self.open_hour == self.close_hour:
+            raise ValueError("Session open and close hours must differ")
 
     def _holidays(self):
         try:
@@ -43,10 +68,11 @@ class MarketSession:
         if now.tzinfo is None:
             raise ValueError("Market session clock must be timezone-aware")
         now = now.astimezone(timezone.utc)
-        if now.date() in self._holidays():
+        local_now = now.astimezone(self.session_timezone)
+        if local_now.date() in self._holidays():
             return SessionState(False, "تعطیلی ثبت‌شده در تقویم بازار", now)
-        weekday = now.weekday()
-        minute = now.hour * 60 + now.minute
+        weekday = local_now.weekday()
+        minute = local_now.hour * 60 + local_now.minute
         opening = self.open_hour * 60
         closing = self.close_hour * 60
         if weekday == 5:

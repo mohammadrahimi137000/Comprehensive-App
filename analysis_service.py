@@ -36,15 +36,50 @@ class AnalysisService:
             # into one synthetic candle sequence.
             selected_source = eligible[0]["source"]
 
+        timeframe_key = timeframe.strip().upper()
+        timeframe_minutes = {
+            "M1": 1, "M2": 2, "M3": 3, "M5": 5, "M10": 10,
+            "M15": 15, "M30": 30, "H1": 60, "H2": 120,
+            "H4": 240, "D1": 1440,
+        }.get(timeframe_key)
+        if timeframe_minutes is None:
+            raise ValueError(f"تایم‌فریم پشتیبانی نمی‌شود: {timeframe_key}")
+
+        # UI aliases are categories, not literal SQLite source names.
+        if selected_source:
+            source_filter = selected_source.strip().lower()
+            if source_filter in {"spot", "broker"}:
+                available_sources = self.store.list_sources(symbol, timeframe_key)
+                if source_filter == "spot":
+                    matches = [
+                        item for item in available_sources
+                        if any(tag in item["source"].lower()
+                               for tag in ("spot", "xaus", "corgano"))
+                    ]
+                else:
+                    matches = [
+                        item for item in available_sources
+                        if any(tag in item["source"].lower()
+                               for tag in ("biquote", "broker"))
+                    ]
+                if not matches:
+                    raise ValueError(
+                        f"هیچ منبع {'Spot' if source_filter == 'spot' else 'Broker'} "
+                        f"برای {symbol} / {timeframe_key} موجود نیست."
+                    )
+                selected_source = matches[0]["source"]
+
         candles = self.store.get_candles(
-            symbol=symbol, timeframe=timeframe, limit=candle_limit,
+            symbol=symbol, timeframe=timeframe_key, limit=candle_limit,
             source=selected_source,
         )
         if len(candles) < 30:
             raise ValueError(
                 f"داده کافی نیست: حداقل ۳۰ کندل کامل لازم است؛ فعلاً {len(candles)} کندل موجود است."
             )
-        result = self.engine.analyze(candles)
+        result = self.engine.analyze(
+            candles, timeframe_minutes=timeframe_minutes
+        )
         result["market_structure"] = analyze_structure(candles)
         result.update(analyze_brains(candles))
         metadata = getattr(self.ml_model, "metadata", {})
