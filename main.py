@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 
 from auto_chart_detector import ChartScanner
 from analysis_service import AnalysisService
-from biquote_stream import BiQuoteSignalRClient
+from resilient_feed import ResilientBiQuoteFeed
 from live_market_pipeline import LiveMarketPipeline
 from trade_journal import TradeJournal
 from screenshot_capture import capture_window_screenshot
@@ -63,7 +63,7 @@ class MainWindow(QMainWindow):
         self.feed_bridge.status_changed.connect(self._on_feed_status)
         self.feed_bridge.quote_received.connect(self._on_feed_quote)
         self.feed_bridge.reference_received.connect(self._on_reference_result)
-        self.market_feed = BiQuoteSignalRClient(
+        self.market_feed = ResilientBiQuoteFeed(
             symbols=("XAUUSD",),
             on_quote=self._on_market_quote,
             on_status=self.feed_bridge.status_changed.emit,
