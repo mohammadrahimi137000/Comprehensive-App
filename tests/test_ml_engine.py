@@ -32,3 +32,17 @@ def test_ml_model_rejects_short_history():
     import pytest
     with pytest.raises(ValueError, match="180"):
         WalkForwardDirectionModel().fit(candles(100))
+
+
+def test_model_persistence_round_trip(tmp_path):
+    rows = candles()
+    model = WalkForwardDirectionModel(epochs=60)
+    model.fit(rows, horizon=5)
+    model.metadata = {"symbol": "XAUUSD", "timeframe": "M1", "source": "broker"}
+    path = tmp_path / "ml_model.json"
+    model.save(path, model.metadata)
+
+    restored = WalkForwardDirectionModel()
+    metadata = restored.load(path)
+    assert metadata == model.metadata
+    assert restored.predict(rows)["up_probability"] == model.predict(rows)["up_probability"]
