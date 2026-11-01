@@ -99,6 +99,17 @@ class MarketStore:
             rows = connection.execute(query, parameters).fetchall()
         return [dict(row) for row in reversed(rows)]
 
+
+    def list_sources(self, symbol: str, timeframe: str) -> list[dict]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT source, COUNT(*) AS candle_count, MAX(timestamp) AS latest_timestamp
+                   FROM candles WHERE symbol=? AND timeframe=?
+                   GROUP BY source ORDER BY latest_timestamp DESC""",
+                (symbol.strip().upper(), timeframe.strip().upper()),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def save_forecast(self, source: str, symbol: str, timeframe: str, payload: Mapping) -> int:
         encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False)
         with self._connect() as connection:
