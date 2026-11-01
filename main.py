@@ -20,7 +20,7 @@ from analysis_service import AnalysisService
 from resilient_feed import ResilientBiQuoteFeed
 from live_market_pipeline import LiveMarketPipeline
 from trade_journal import TradeJournal
-from screenshot_capture import capture_window_screenshot
+from screenshot_capture import capture_window_screenshot, capture_window_frame
 from performance_engine import analyze_performance
 from chart_recognition import recognize_chart
 from chart_projection import ChartProjection
@@ -421,10 +421,9 @@ class MainWindow(QMainWindow):
             info = self.current_chart_info
             left, top, right, bottom = win32gui.GetWindowRect(info["hwnd"])
             info.update({"left": left, "top": top, "right": right, "bottom": bottom})
-            screenshot_path = capture_window_screenshot(info["hwnd"])
-            image = cv2.imread(screenshot_path)
+            image, capture_origin = capture_window_frame(info["hwnd"])
             recognition = recognize_chart(
-                image, screen_origin=(left, top), window_title=info.get("title", ""),
+                image, screen_origin=capture_origin, window_title=info.get("title", ""),
                 tesseract_cmd=self.tesseract_path_input.text().strip(),
             )
             info["recognition"] = recognition
@@ -645,10 +644,9 @@ class MainWindow(QMainWindow):
         confidence = info.get("confidence", 0)
         recognition = {}
         try:
-            screenshot_path = capture_window_screenshot(info["hwnd"])
-            image = cv2.imread(screenshot_path)
+            image, capture_origin = capture_window_frame(info["hwnd"])
             recognition = recognize_chart(
-                image, screen_origin=(info["left"], info["top"]),
+                image, screen_origin=capture_origin,
                 window_title=title,
                 tesseract_cmd=self.tesseract_path_input.text().strip() if hasattr(self, "tesseract_path_input") else self.ocr_tesseract_path,
             )
