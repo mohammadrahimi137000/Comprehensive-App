@@ -40,6 +40,7 @@ class MainWindow(QMainWindow):
             on_status=self.feed_bridge.status_changed.emit,
         )
         self.feed_thread = None
+        self._closing = False
         self._build_ui()
         self._start_scanner()
         self._start_market_feed()
@@ -214,6 +215,8 @@ class MainWindow(QMainWindow):
         def connect_feed():
             try:
                 self.market_feed.start()
+                if self._closing:
+                    self.market_feed.stop()
             except Exception as exc:
                 self.feed_bridge.status_changed.emit(
                     f"اتصال فید ناموفق بود: {type(exc).__name__}: {exc}"
@@ -236,7 +239,6 @@ class MainWindow(QMainWindow):
         self.footer.setText(message)
 
     def _on_feed_quote(self, quote):
-        self.data_value.setText("فید زنده")
         self.symbol_value.setText(quote.instrument)
         self.footer.setText(
             f"{quote.source} | Bid: {quote.bid:.3f} | Ask: {quote.ask:.3f} "
@@ -298,6 +300,7 @@ class MainWindow(QMainWindow):
         self.chart_status.setText("چارت قبلی دیگر در صفحه قابل شناسایی نیست.")
 
     def closeEvent(self, event):
+        self._closing = True
         if self.scanner is not None:
             self.scanner.stop()
         if self.market_feed is not None:
@@ -305,6 +308,8 @@ class MainWindow(QMainWindow):
                 self.market_feed.stop()
             except Exception:
                 pass
+        if self.feed_thread is not None and self.feed_thread.is_alive():
+            self.feed_thread.join(timeout=3.0)
         event.accept()
 
 
