@@ -183,6 +183,39 @@ class MainWindow(QMainWindow):
             layout.addWidget(self.analysis_output, 1)
 
 
+
+        elif index == 3:
+            note = QLabel("زون‌های استاتیک و خطوط داینامیک از کندل‌های ذخیره‌شده محاسبه می‌شوند؛ تأیید قیمت برای ورود لازم است.")
+            note.setWordWrap(True)
+            note.setObjectName("muted")
+            layout.addWidget(note)
+            button = QPushButton("محاسبه حمایت، مقاومت و خطوط داینامیک")
+            button.clicked.connect(self._refresh_structure)
+            layout.addWidget(button)
+            self.structure_output = QPlainTextEdit()
+            self.structure_output.setReadOnly(True)
+            layout.addWidget(self.structure_output, 1)
+        elif index == 4:
+            note = QLabel("سناریوها و مسیر ۱۵ دقیقه‌ای، برآوردهای الگوریتمی غیرکالیبره هستند و تضمین حرکت بازار نیستند.")
+            note.setWordWrap(True)
+            note.setObjectName("muted")
+            layout.addWidget(note)
+            button = QPushButton("ساخت سناریوهای تازه")
+            button.clicked.connect(self._refresh_scenarios)
+            layout.addWidget(button)
+            self.scenario_output = QPlainTextEdit()
+            self.scenario_output.setReadOnly(True)
+            layout.addWidget(self.scenario_output, 1)
+        elif index == 5:
+            note = QLabel("آخرین snapshotهای تحلیل ذخیره‌شده در دیتابیس محلی.")
+            note.setObjectName("muted")
+            layout.addWidget(note)
+            button = QPushButton("بارگذاری تاریخچه پیش‌بینی‌ها")
+            button.clicked.connect(self._refresh_forecast_history)
+            layout.addWidget(button)
+            self.forecast_history_output = QPlainTextEdit()
+            self.forecast_history_output.setReadOnly(True)
+            layout.addWidget(self.forecast_history_output, 1)
         elif index == 6:
             note = QLabel("گزارش فقط بر اساس معاملات بسته‌شده‌ای محاسبه می‌شود که در ژورنال دستی ثبت شده‌اند؛ معیارها بر حسب R هستند.")
             note.setWordWrap(True)
@@ -278,6 +311,42 @@ class MainWindow(QMainWindow):
 
 
 
+
+
+    def _run_latest_analysis(self):
+        return self.analysis_service.analyze_latest("XAUUSD", "M1")
+
+    def _refresh_structure(self):
+        try:
+            result = self._run_latest_analysis()
+            self.structure_output.setPlainText(json.dumps(
+                result["market_structure"], ensure_ascii=False, indent=2
+            ))
+        except Exception as exc:
+            self.structure_output.setPlainText(str(exc))
+
+    def _refresh_scenarios(self):
+        try:
+            result = self._run_latest_analysis()
+            output = {
+                "scenarios": result["scenarios"],
+                "directional_bias": result["directional_bias"],
+                "forecast_points": result["forecast_points"],
+                "limitations": result["limitations"],
+            }
+            self.scenario_output.setPlainText(json.dumps(
+                output, ensure_ascii=False, indent=2
+            ))
+        except Exception as exc:
+            self.scenario_output.setPlainText(str(exc))
+
+    def _refresh_forecast_history(self):
+        if not hasattr(self, "forecast_history_output"):
+            return
+        rows = self.analysis_service.store.latest_forecasts("XAUUSD", limit=50)
+        self.forecast_history_output.setPlainText(json.dumps(
+            rows, ensure_ascii=False, indent=2
+        ))
 
     def _refresh_performance(self):
         if not hasattr(self, "performance_output"):
