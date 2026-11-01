@@ -50,6 +50,7 @@ class MainWindow(QMainWindow):
         self.feed_bridge.quote_received.connect(self._on_feed_quote)
         self.feed_bridge.reference_received.connect(self._on_reference_result)
         self.current_chart_info = None
+        self.latest_accepted_quote = None
         self.market_pipeline = LiveMarketPipeline(store=self.analysis_service.store)
         self.history_bootstrapper = HistoryBootstrapper(
             store=self.analysis_service.store,
@@ -68,7 +69,7 @@ class MainWindow(QMainWindow):
             on_status=self.feed_bridge.status_changed.emit,
         )
         self.reference_monitor = SpotReferenceMonitor(
-            latest_broker_quote=lambda: self.market_feed.get_latest_quote("XAUUSD"),
+            latest_broker_quote=lambda: self.latest_accepted_quote,
             on_result=self.feed_bridge.reference_received.emit,
             on_status=self.feed_bridge.status_changed.emit,
         )
@@ -587,6 +588,7 @@ class MainWindow(QMainWindow):
     def _on_market_quote(self, quote):
         result = self.market_pipeline.on_quote(quote)
         if result.get("accepted"):
+            self.latest_accepted_quote = quote
             self.latest_tick_pressure = self.tick_pressure.update(quote)
             self.feed_bridge.quote_received.emit(quote)
         else:
