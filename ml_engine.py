@@ -47,8 +47,9 @@ class WalkForwardDirectionModel:
         self.metadata: dict = {}
 
     def fit(self, candles: list[dict], horizon: int = 15) -> dict:
-        if horizon < 1 or len(candles) < max(180, horizon * 5):
-            raise ValueError("At least 180 candles are required for walk-forward training.")
+        minimum_history = max(200, horizon * 5 + 45)
+        if horizon < 1 or len(candles) < minimum_history:
+            raise ValueError(f"At least {minimum_history} candles are required for walk-forward training.")
         data = []
         for index in range(25, len(candles) - horizon):
             x = _features(candles, index)
