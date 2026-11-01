@@ -30,7 +30,7 @@ def test_walk_forward_model_trains_and_reports_holdout_metrics():
 
 def test_ml_model_rejects_short_history():
     import pytest
-    with pytest.raises(ValueError, match="180"):
+    with pytest.raises(ValueError, match="200"):
         WalkForwardDirectionModel().fit(candles(100))
 
 
