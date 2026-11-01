@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from analysis_engine import AnalysisEngine
 from market_store import MarketStore
+from structure_engine import analyze_structure
 
 
 class AnalysisService:
@@ -21,6 +22,7 @@ class AnalysisService:
                 f"داده کافی نیست: حداقل ۳۰ کندل کامل لازم است؛ فعلاً {len(candles)} کندل موجود است."
             )
         result = self.engine.analyze(candles)
+        result["market_structure"] = analyze_structure(candles)
         result["symbol"] = symbol.strip().upper()
         result["timeframe"] = timeframe.strip().upper()
         result["source"] = source
