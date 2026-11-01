@@ -56,7 +56,7 @@ class MainWindow(QMainWindow):
             store=self.analysis_service.store,
             on_status=self.feed_bridge.status_changed.emit,
         )
-        self.ml_model = WalkForwardDirectionModel()
+        self.ml_model = self.analysis_service.ml_model
         self.tick_pressure = TickPressure()
         self.latest_tick_pressure = self.tick_pressure.snapshot()
         self.news_client = RssNewsClient()
@@ -392,6 +392,10 @@ class MainWindow(QMainWindow):
                 "XAUUSD", "M1", limit=10000, source=source
             )
             metrics = self.ml_model.fit(rows, horizon=15)
+            self.ml_model.metadata = {
+                "symbol": "XAUUSD", "timeframe": "M1", "source": source,
+            }
+            self.ml_model.save(self.analysis_service.ml_model_path, self.ml_model.metadata)
             prediction = self.ml_model.predict(rows)
             self.ml_output.setPlainText(json.dumps(
                 {"evaluation": metrics, "latest_prediction": prediction},
