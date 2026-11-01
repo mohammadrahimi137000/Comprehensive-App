@@ -178,3 +178,53 @@ class CorganoSpotAdapter:
         self._cached = result
         self._last_request = now
         return result
+
+
+class BiQuoteHistoryAdapter:
+    """Fetch completed OHLC bars from BiQuote's documented public history endpoint."""
+
+    name = "BiQuote OHLC"
+
+    INTERVALS = {
+        "M1": "1m", "M5": "5m", "M15": "15m", "M30": "30m",
+        "H1": "1h", "H4": "4h", "D1": "1d",
+    }
+
+    def __init__(self, getter: JsonGetter = _get_json, timeout: float = 12.0):
+        self.getter = getter
+        self.timeout = timeout
+
+    def get_candles(self, symbol: str = "XAUUSD", timeframe: str = "M1",
+                    limit: int = 1000) -> list[dict]:
+        from analysis_engine import Candle
+
+        normalized = timeframe.strip().upper()
+        if normalized not in self.INTERVALS:
+            raise ValueError(f"Unsupported BiQuote timeframe: {timeframe}")
+        limit = max(30, min(1000, int(limit)))
+        payload = self.getter(
+            f"https://biquote.io/api/{symbol.strip().upper()}/ohlc"
+            f"?interval={self.INTERVALS[normalized]}&limit={limit}",
+            self.timeout,
+        )
+        bars = payload.get("bars")
+        if not isinstance(bars, list):
+            raise RuntimeError("BiQuote OHLC response has no bars array")
+        result = []
+        for bar in bars:
+            if not isinstance(bar, dict) or bar.get("isOpen") is True:
+                continue
+            timestamp = _parse_timestamp(str(bar.get("openTime", ""))).isoformat()
+            candle = Candle.from_value({
+                "timestamp": timestamp,
+                "open": bar["open"], "high": bar["high"],
+                "low": bar["low"], "close": bar["close"],
+                "volume": bar.get("volume", 0) or 0,
+            })
+            result.append({
+                "timestamp": candle.timestamp, "open": candle.open,
+                "high": candle.high, "low": candle.low,
+                "close": candle.close, "volume": candle.volume,
+            })
+        result.sort(key=lambda row: row["timestamp"])
+        return result
