@@ -1,0 +1,29 @@
+name: Windows executable
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Build Windows application
+        shell: pwsh
+        run: .\build_windows.ps1
+      - name: Upload executable folder
+        uses: actions/upload-artifact@v4
+        with:
+          name: ComprehensiveApp-Windows
+          path: dist/ComprehensiveApp/
+          if-no-files-found: error
