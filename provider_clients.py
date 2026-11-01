@@ -158,7 +158,12 @@ class CorganoSpotAdapter:
         if price <= 0:
             raise RuntimeError("Corgano returned a non-positive spot price")
         attribution = payload.get("attribution") or {}
-        if attribution.get("required") and not attribution.get("url"):
+        attribution_html = str(attribution.get("html") or "")
+        attribution_url = attribution.get("url")
+        if not attribution_url and 'href="' in attribution_html:
+            attribution_url = attribution_html.split('href="', 1)[1].split('"', 1)[0]
+        attribution_text = attribution.get("text") or attribution.get("label") or "Gold price data by Corgano"
+        if attribution.get("required", True) and not attribution_url:
             raise RuntimeError("Corgano attribution URL is missing")
         result = SpotReference(
             source="Corgano spot reference",
@@ -167,8 +172,8 @@ class CorganoSpotAdapter:
             price=price,
             state="fresh",
             age_seconds=age,
-            attribution_text=attribution.get("text"),
-            attribution_url=attribution.get("url"),
+            attribution_text=attribution_text,
+            attribution_url=attribution_url,
         )
         self._cached = result
         self._last_request = now
