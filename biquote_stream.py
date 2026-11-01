@@ -106,9 +106,10 @@ class BiQuoteSignalRClient:
             return self._latest.get(symbol.strip().upper())
 
     def stop(self) -> None:
-        if self.connection is not None and self._started:
+        if self.connection is not None:
             try:
-                self.connection.send("Unsubscribe", [list(self.symbols)])
+                if self._started:
+                    self.connection.send("Unsubscribe", [list(self.symbols)])
             finally:
                 self.connection.stop()
         self._started = False
