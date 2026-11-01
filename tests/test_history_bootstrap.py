@@ -39,3 +39,37 @@ def test_bootstrap_persists_history_by_source_and_timeframe(tmp_path):
     result = bootstrapper.bootstrap_if_needed()
     assert result["M1"]["status"] == "imported"
     assert len(store.get_candles("XAUUSD", "M1", 100, source="BiQuote OHLC")) == 40
+
+
+def test_recent_history_is_reused_but_stale_history_is_refreshed(tmp_path):
+    from datetime import datetime, timezone
+
+    store = MarketStore(tmp_path / "market.db")
+    calls = []
+    class FakeAdapter:
+        name = "BiQuote OHLC"
+        def get_candles(self, symbol, timeframe, limit):
+            calls.append(timeframe)
+            return [{
+                "timestamp": f"2026-11-01T10:{i:02d}:00+00:00",
+                "open": 2000, "high": 2001, "low": 1999, "close": 2000.5,
+                "volume": 0,
+            } for i in range(40)]
+
+    clock = lambda: datetime(2026, 11, 1, 10, 40, tzinfo=timezone.utc)
+    bootstrapper = HistoryBootstrapper(
+        store=store, adapter=FakeAdapter(), minimum_existing=30,
+        limit=100, clock=clock,
+    )
+    bootstrapper.bootstrap_if_needed()
+    first_call_count = len(calls)
+    bootstrapper.bootstrap_if_needed()
+    assert len(calls) == first_call_count
+
+    stale_clock = lambda: datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc)
+    stale_bootstrapper = HistoryBootstrapper(
+        store=store, adapter=FakeAdapter(), minimum_existing=30,
+        limit=100, clock=stale_clock,
+    )
+    stale_bootstrapper.bootstrap_if_needed()
+    assert len(calls) > first_call_count
