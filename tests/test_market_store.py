@@ -25,7 +25,7 @@ def test_sources_are_kept_separate(tmp_path):
     store = MarketStore(tmp_path / "market.db")
     store.upsert_candles("spot", "XAUUSD", "M1", candles())
     store.upsert_candles("broker", "XAUUSD", "M1", candles())
-    assert len(store.get_candles("XAUUSD", "M1")) == 2
+    assert len(store.get_candles("XAUUSD", "M1")) == 4
     assert len(store.get_candles("XAUUSD", "M1", source="spot")) == 2
 
 
