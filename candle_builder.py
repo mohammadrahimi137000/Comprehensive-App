@@ -14,6 +14,7 @@ class _WorkingBar:
     high: float
     low: float
     close: float
+    last_timestamp: float
     tick_count: int = 1
 
 
@@ -30,22 +31,24 @@ class TickCandleBuilder:
         if quote.bid <= 0 or quote.ask <= quote.bid:
             raise ValueError("Quote must contain a valid positive bid/ask spread")
         key = (quote.source, quote.instrument.upper())
-        timestamp = int(quote.timestamp.astimezone(timezone.utc).timestamp())
-        bucket = timestamp - (timestamp % self.timeframe_seconds)
+        timestamp = quote.timestamp.astimezone(timezone.utc).timestamp()
+        bucket = int(timestamp) - (int(timestamp) % self.timeframe_seconds)
         price = quote.mid
         current = self._bars.get(key)
         if current is None:
-            self._bars[key] = _WorkingBar(bucket, price, price, price, price)
+            self._bars[key] = _WorkingBar(bucket, price, price, price, price, timestamp)
             return []
-        if bucket < current.bucket:
+        if timestamp < current.last_timestamp or bucket < current.bucket:
             return []
         if bucket == current.bucket:
             current.high = max(current.high, price)
             current.low = min(current.low, price)
             current.close = price
+            current.last_timestamp = timestamp
             current.tick_count += 1
             return []
 
+        gap_buckets = max(0, (bucket - current.bucket) // self.timeframe_seconds - 1)
         completed = {
             "timestamp": current.bucket,
             "open": current.open,
@@ -57,8 +60,9 @@ class TickCandleBuilder:
             "source": quote.source,
             "symbol": quote.instrument.upper(),
             "timeframe_seconds": self.timeframe_seconds,
+            "missing_intervals_after": gap_buckets,
         }
-        self._bars[key] = _WorkingBar(bucket, price, price, price, price)
+        self._bars[key] = _WorkingBar(bucket, price, price, price, price, timestamp)
         return [completed]
 
     def current_bar(self, source: str, instrument: str) -> dict | None:
@@ -70,6 +74,7 @@ class TickCandleBuilder:
             "open": current.open, "high": current.high,
             "low": current.low, "close": current.close,
             "volume": 0.0, "tick_count": current.tick_count,
+            "last_timestamp": current.last_timestamp,
         }
 
     def reset(self) -> None:
