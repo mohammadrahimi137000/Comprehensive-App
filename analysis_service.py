@@ -1,4 +1,4 @@
-"""Application service joining the local candle store and analysis engine."""
+"""Application service joining a single trusted candle source to analysis."""
 from __future__ import annotations
 
 from analysis_engine import AnalysisEngine
@@ -14,8 +14,22 @@ class AnalysisService:
 
     def analyze_latest(self, symbol: str, timeframe: str = "M1",
                        source: str | None = None, candle_limit: int = 500) -> dict:
+        selected_source = source
+        if selected_source is None:
+            available = self.store.list_sources(symbol, timeframe)
+            eligible = [item for item in available if item["candle_count"] >= 30]
+            if not eligible:
+                total = sum(item["candle_count"] for item in available)
+                raise ValueError(
+                    f"داده کافی از یک منبع مستقل وجود ندارد؛ حداقل ۳۰ کندل از یک منبع لازم است. مجموع منابع: {total}"
+                )
+            # Select one source only. Never concatenate different brokers/spot references
+            # into one synthetic candle sequence.
+            selected_source = eligible[0]["source"]
+
         candles = self.store.get_candles(
-            symbol=symbol, timeframe=timeframe, limit=candle_limit, source=source
+            symbol=symbol, timeframe=timeframe, limit=candle_limit,
+            source=selected_source,
         )
         if len(candles) < 30:
             raise ValueError(
@@ -25,7 +39,7 @@ class AnalysisService:
         result["market_structure"] = analyze_structure(candles)
         result["symbol"] = symbol.strip().upper()
         result["timeframe"] = timeframe.strip().upper()
-        result["source"] = source
+        result["source"] = selected_source
         self.store.save_forecast(
             source="analysis_engine", symbol=symbol, timeframe=timeframe, payload=result
         )
