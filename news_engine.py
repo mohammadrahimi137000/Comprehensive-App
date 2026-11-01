@@ -2,12 +2,25 @@
 from __future__ import annotations
 
 import re
+import json
+import urllib.request
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from html import unescape
 from urllib.parse import urlparse
+
+
+
+def _get_json_any(url: str, timeout: float = 10.0):
+    request = urllib.request.Request(
+        url, headers={"Accept": "application/json", "User-Agent": "Comprehensive-App/1.0"}
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        if response.status != 200:
+            raise RuntimeError(f"BiQuote returned HTTP {response.status}")
+        return json.loads(response.read().decode("utf-8"))
 
 
 DEFAULT_FEEDS = [
@@ -153,8 +166,7 @@ class BiQuoteContextClient:
 
     def __init__(self, getter=None, timeout: float = 10.0):
         if getter is None:
-            from provider_clients import _get_json
-            getter = _get_json
+            getter = _get_json_any
         self.getter = getter
         self.timeout = timeout
 
