@@ -1,7 +1,7 @@
 """Transparent, mouse-through forecast overlay for calibrated chart coordinates."""
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, Qt
+from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPolygonF
 from PySide6.QtWidgets import QApplication, QWidget
 
@@ -69,6 +69,12 @@ class ForecastOverlay(QWidget):
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setClipRect(QRectF(
+            self.projection.chart_left - origin.left(),
+            self.projection.chart_top - origin.top(),
+            self.projection.chart_right - self.projection.chart_left,
+            self.projection.chart_bottom - self.projection.chart_top,
+        ))
         polygon = QPolygonF()
         for x, y in band_points:
             polygon.append(QPointF(x, y))
