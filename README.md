@@ -103,3 +103,8 @@ pytest -q
 - `provider_clients.py` یک کلاینت read-only برای BiQuote REST دارد که `allowStale=false` می‌فرستد و فقط پاسخ دارای Bid/Ask، زمان‌دار و بازار باز را به‌عنوان Quote برمی‌گرداند. این REST adapter برای fallback و تست است؛ برای استفاده پیوسته باید SignalR streaming رسمی پیاده‌سازی شود.
 - همین فایل XAUS Spot را جداگانه به‌عنوان `SpotReference` می‌خواند. فقط حالت `fresh` پذیرفته می‌شود؛ قیمت indicative mid است و عمداً Bid/Ask جعلی ساخته نمی‌شود.
 - کلاینت‌ها فعلاً مستقل از UI هستند و هنوز scheduler، اتصال پایدار SignalR، ذخیره خودکار تیک‌ها و ساخت کندل از تیک را انجام نمی‌دهند.
+
+
+### جریان زنده BiQuote (SignalR)
+
+ماژول `biquote_stream.py` اتصال SignalR به `/hubs/tick`، ثبت رویداد `ReceiveTick`، اشتراک نمادها، دریافت Bid/Ask و reconnect خودکار را فراهم می‌کند. از REST polling برای حلقه زنده استفاده نمی‌شود؛ REST adapter فقط fallback دستی است. این کلاینت هنوز در UI به چرخه عمر برنامه متصل نشده و در تست CI از اتصال جعلی استفاده می‌کند؛ اتصال واقعی باید روی سیستم ویندوزی و در ساعات باز بودن بازار آزمایش شود.
