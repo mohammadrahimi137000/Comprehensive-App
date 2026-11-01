@@ -24,7 +24,6 @@ from performance_engine import analyze_performance
 from chart_recognition import recognize_chart
 from chart_projection import ChartProjection
 from forecast_overlay import ForecastOverlay
-from ml_engine import WalkForwardDirectionModel
 from tick_flow import TickPressure
 from news_engine import RssNewsClient, BiQuoteContextClient
 from reference_monitor import SpotReferenceMonitor
@@ -385,7 +384,7 @@ class MainWindow(QMainWindow):
     def _train_ml_model(self):
         try:
             sources = self.analysis_service.store.list_sources("XAUUSD", "M1")
-            source = next((item["source"] for item in sources if item["candle_count"] >= 180), None)
+            source = next((item["source"] for item in sources if item["candle_count"] >= 200), None)
             if source is None:
                 raise ValueError("حداقل ۲۰۰ کندل از یک منبع مستقل برای آموزش ML لازم است.")
             rows = self.analysis_service.store.get_candles(
