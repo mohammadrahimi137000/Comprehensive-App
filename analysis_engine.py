@@ -177,6 +177,7 @@ class AnalysisEngine:
             "symbol": None,
             "timeframe": None,
             "last_close": last.close,
+            "last_candle_timestamp": str(last.timestamp),
             "input_timeframe_minutes": timeframe_minutes,
             "forecast_horizon_minutes": effective_horizon,
             "indicators": {

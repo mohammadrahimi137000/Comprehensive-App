@@ -6,6 +6,7 @@ from market_store import MarketStore
 from structure_engine import analyze_structure
 from analysis_brains import analyze_brains
 from ml_engine import WalkForwardDirectionModel
+from forecast_validation import evaluate_forecast_history
 
 
 def _zone_distance(price: float, zone: dict) -> float:
@@ -146,6 +147,10 @@ class AnalysisService:
             "note": "Track forecasts against later completed candles before treating scores as probabilities.",
         }
 
+        result["forecast_performance"] = evaluate_forecast_history(
+            self.store.latest_forecasts(symbol, limit=500),
+            candles, timeframe_minutes, selected_source, timeframe_key,
+        )
         result["symbol"] = symbol.strip().upper()
         result["timeframe"] = timeframe_key
         result["source"] = selected_source
