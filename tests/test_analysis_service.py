@@ -34,3 +34,13 @@ def test_service_explains_missing_history(tmp_path):
     store.upsert_candles("spot", "XAUUSD", "M1", rows(10))
     with pytest.raises(ValueError, match="حداقل ۳۰"):
         AnalysisService(store=store).analyze_latest("XAUUSD", "M1", "spot")
+
+
+def test_service_selects_one_complete_source_instead_of_mixing_feeds(tmp_path):
+    store = MarketStore(tmp_path / "market.db")
+    store.upsert_candles("slow_spot", "XAUUSD", "M1", rows(50))
+    newer = rows(50)
+    newer[-1]["timestamp"] = 999
+    store.upsert_candles("broker_live", "XAUUSD", "M1", newer)
+    result = AnalysisService(store=store).analyze_latest("XAUUSD", "M1")
+    assert result["source"] == "broker_live"
