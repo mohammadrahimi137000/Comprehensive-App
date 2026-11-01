@@ -116,3 +116,91 @@ class RssNewsClient:
                 "RSS feeds may be delayed, incomplete, or unavailable.",
             ],
         }
+
+
+class BiQuoteContextClient:
+    """Official BiQuote market-news and economic-calendar read-only endpoints."""
+
+    def __init__(self, getter=None, timeout: float = 10.0):
+        if getter is None:
+            from provider_clients import _get_json
+            getter = _get_json
+        self.getter = getter
+        self.timeout = timeout
+
+    def fetch(self, symbol: str = "XAUUSD", countries: tuple[str, ...] = ("US", "EU", "GB"),
+              importance: str = "high", news_limit: int = 20,
+              calendar_limit: int = 100) -> dict:
+        from urllib.parse import urlencode
+
+        if importance not in {"low", "medium", "high"}:
+            raise ValueError("importance must be low, medium or high")
+        news_url = "https://biquote.io/api/news/market?" + urlencode({
+            "symbol": symbol.strip().upper(), "language": "en",
+            "country": "US", "maxResults": max(1, min(50, news_limit)),
+        })
+        calendar_url = "https://biquote.io/api/calendar/upcoming?" + urlencode({
+            "countries": ",".join(countries),
+            "importance": importance,
+            "limit": max(1, min(500, calendar_limit)),
+        })
+        errors = []
+        try:
+            news_payload = self.getter(news_url, self.timeout)
+            if not isinstance(news_payload, list):
+                raise RuntimeError("BiQuote news response is not a list")
+            news = [{
+                "title": str(item.get("title") or ""),
+                "description": str(item.get("description") or ""),
+                "url": str(item.get("url") or ""),
+                "publisher": str(item.get("publisher") or ""),
+                "published_at": item.get("publishedDate"),
+                "analysis": classify_headline(
+                    str(item.get("title") or ""), str(item.get("description") or "")
+                ),
+            } for item in news_payload if isinstance(item, dict)]
+        except Exception as exc:
+            news = []
+            errors.append({"source": "BiQuote market news", "error": f"{type(exc).__name__}: {exc}"})
+        try:
+            calendar_payload = self.getter(calendar_url, self.timeout)
+            if not isinstance(calendar_payload, list):
+                raise RuntimeError("BiQuote calendar response is not a list")
+            events = []
+            for item in calendar_payload:
+                if not isinstance(item, dict):
+                    continue
+                actual = item.get("actual")
+                forecast = item.get("forecast")
+                surprise = None
+                if actual is not None and forecast is not None:
+                    try:
+                        surprise = float(actual) - float(forecast)
+                    except (TypeError, ValueError):
+                        pass
+                events.append({
+                    "id": item.get("id"), "time": item.get("time"),
+                    "country": item.get("countryCode"), "currency": item.get("currency"),
+                    "name": item.get("name"), "importance": item.get("importance"),
+                    "type": item.get("type"), "sector": item.get("sector"),
+                    "actual": actual, "forecast": forecast,
+                    "previous": item.get("previous"),
+                    "revised_previous": item.get("revisedPrevious"),
+                    "surprise_actual_minus_forecast": surprise,
+                    "time_mode": item.get("timeMode"),
+                    "source": item.get("source"), "source_url": item.get("sourceUrl"),
+                })
+            events.sort(key=lambda row: row.get("time") or "")
+        except Exception as exc:
+            events = []
+            errors.append({"source": "BiQuote economic calendar", "error": f"{type(exc).__name__}: {exc}"})
+        return {
+            "symbol": symbol.strip().upper(),
+            "news": news, "economic_calendar": events, "errors": errors,
+            "limitations": [
+                "News headline tone is a keyword heuristic, not a causal market-impact model.",
+                "Calendar actual/forecast values are kept null when unpublished; null is never treated as zero.",
+                "Non-exact calendar time modes are date/tentative placeholders, not precise release times.",
+                "Confirm important releases with the linked original publisher before acting.",
+            ],
+        }
