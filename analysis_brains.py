@@ -1,7 +1,6 @@
 """Independent, explainable OHLC analysis brains with explicit evidence and fixed weights."""
 from __future__ import annotations
 
-from math import sqrt
 from statistics import mean, pstdev
 
 from analysis_engine import Candle
@@ -9,6 +8,14 @@ from analysis_engine import Candle
 
 def _clamp(value: float) -> float:
     return max(-1.0, min(1.0, value))
+
+
+def _ema(values: list[float], period: int) -> float:
+    alpha = 2.0 / (period + 1)
+    value = values[0]
+    for item in values[1:]:
+        value = alpha * item + (1 - alpha) * value
+    return value
 
 
 def _direction(score: float) -> str:
@@ -90,8 +97,9 @@ def analyze_brains(values: list[dict]) -> dict:
         "data_type": "OHLC_liquidity_proxy_not_order_book",
     }
 
-    fast = mean([item.close for item in candles[-8:]])
-    slow = mean([item.close for item in candles[-24:]])
+    closes_for_ema = [item.close for item in candles]
+    fast = _ema(closes_for_ema[-30:], 8)
+    slow = _ema(closes_for_ema[-60:], 24)
     rsi_gain = mean([max(b.close - a.close, 0) for a, b in zip(candles[-15:], candles[-14:])])
     rsi_loss = mean([max(a.close - b.close, 0) for a, b in zip(candles[-15:], candles[-14:])])
     rsi = 100 - 100 / (1 + rsi_gain / max(rsi_loss, 1e-9))
@@ -99,7 +107,7 @@ def analyze_brains(values: list[dict]) -> dict:
                              + _clamp((rsi - 50) / 40) * 0.35)
     technical = {
         "score": round(technical_score, 4), "direction": _direction(technical_score),
-        "ema_proxy_fast": fast, "ema_proxy_slow": slow, "rsi_proxy": round(rsi, 2),
+        "ema_fast": fast, "ema_slow": slow, "rsi_proxy": round(rsi, 2),
     }
 
     weights = {
