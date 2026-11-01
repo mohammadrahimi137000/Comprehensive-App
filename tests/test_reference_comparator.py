@@ -15,7 +15,8 @@ def test_compares_broker_mid_to_spot_references_without_substitution():
     ]
     result = compare_reference_prices(quote, refs, now=now)
     assert result["status"] == "compared"
-    assert result["broker_mid"] == 2000.1\n    assert result["checked_at"] == now.isoformat()
+    assert result["broker_mid"] == 2000.1
+    assert result["checked_at"] == now.isoformat()
     assert "bad" in result["outlier_sources"]
     assert all(item["indicative_only"] for item in result["comparisons"])
 
