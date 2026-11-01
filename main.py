@@ -460,6 +460,8 @@ class MainWindow(QMainWindow):
                 "directional_bias": result["directional_bias"],
                 "forecast_points": result["forecast_points"],
                 "limitations": result["limitations"],
+                "brains": result.get("brains", {}),
+                "confluence": result.get("confluence", {}),
             }
             self.scenario_output.setPlainText(json.dumps(
                 output, ensure_ascii=False, indent=2
