@@ -5,7 +5,6 @@ import json
 import sys
 import threading
 
-import cv2
 import win32gui
 
 from PySide6.QtCore import QObject, Qt, Signal, QTimer
@@ -439,8 +438,9 @@ class MainWindow(QMainWindow):
             return
         axis = recognition["price_axis"]
         roi = recognition["chart_roi_screen"]
-        origin_x = self.current_chart_info["left"]
-        origin_y = self.current_chart_info["top"]
+        origin_y = recognition.get("screen_origin", [
+            self.current_chart_info["left"], self.current_chart_info["top"]
+        ])[1]
         try:
             result = self.analysis_service.analyze_latest("XAUUSD", "M1")
             projection = ChartProjection(
