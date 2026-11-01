@@ -40,7 +40,7 @@ def test_main_window_builds_all_pages_without_starting_network(monkeypatch, tmp_
     store = MarketStore(tmp_path / "market.db")
     monkeypatch.setattr(main, "AnalysisService", lambda: AnalysisService(store=store))
     monkeypatch.setattr(main, "ChartScanner", FakeScanner)
-    monkeypatch.setattr(main, "BiQuoteSignalRClient", FakeFeed)
+    monkeypatch.setattr(main, "ResilientBiQuoteFeed", FakeFeed)
 
     window = main.MainWindow()
     assert len(window.nav_buttons) == 9
