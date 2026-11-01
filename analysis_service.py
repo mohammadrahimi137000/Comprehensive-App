@@ -5,6 +5,7 @@ from analysis_engine import AnalysisEngine
 from market_store import MarketStore
 from structure_engine import analyze_structure
 from analysis_brains import analyze_brains
+from ml_engine import WalkForwardDirectionModel
 
 
 class AnalysisService:
@@ -12,6 +13,13 @@ class AnalysisService:
                  engine: AnalysisEngine | None = None):
         self.store = store or MarketStore()
         self.engine = engine or AnalysisEngine(horizon_minutes=15)
+        self.ml_model = WalkForwardDirectionModel()
+        self.ml_model_path = self.store.database_path.parent / "ml_model.json"
+        if self.ml_model_path.exists():
+            try:
+                self.ml_model.load(self.ml_model_path)
+            except Exception:
+                self.ml_model = WalkForwardDirectionModel()
 
     def analyze_latest(self, symbol: str, timeframe: str = "M1",
                        source: str | None = None, candle_limit: int = 500) -> dict:
@@ -39,6 +47,17 @@ class AnalysisService:
         result = self.engine.analyze(candles)
         result["market_structure"] = analyze_structure(candles)
         result.update(analyze_brains(candles))
+        metadata = getattr(self.ml_model, "metadata", {})
+        if (self.ml_model.weights is not None
+                and metadata.get("symbol") == symbol.strip().upper()
+                and metadata.get("timeframe") == timeframe.strip().upper()
+                and metadata.get("source") == selected_source):
+            result["ml_prediction"] = self.ml_model.predict(candles)
+        else:
+            result["ml_prediction"] = {
+                "status": "not_available",
+                "reason": "No trained model matches this symbol, timeframe and data source.",
+            }
         result["symbol"] = symbol.strip().upper()
         result["timeframe"] = timeframe.strip().upper()
         result["source"] = selected_source
