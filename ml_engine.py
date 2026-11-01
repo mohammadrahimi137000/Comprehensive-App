@@ -5,7 +5,9 @@ it is not advertised as profitable or calibrated until enough unseen history exi
 """
 from __future__ import annotations
 
-from math import exp, sqrt
+from math import exp
+import json
+from pathlib import Path
 from statistics import mean
 
 
@@ -42,6 +44,7 @@ class WalkForwardDirectionModel:
         self.l2 = l2
         self.weights: list[float] | None = None
         self.metrics: dict | None = None
+        self.metadata: dict = {}
 
     def fit(self, candles: list[dict], horizon: int = 15) -> dict:
         if horizon < 1 or len(candles) < max(180, horizon * 5):
@@ -88,6 +91,34 @@ class WalkForwardDirectionModel:
             "warning": "Single chronological holdout; not a guarantee of future performance.",
         }
         return self.metrics
+
+
+    def save(self, path: str | Path, metadata: dict | None = None) -> None:
+        if self.weights is None or self.metrics is None:
+            raise RuntimeError("Cannot save an untrained model.")
+        destination = Path(path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "model": "logistic_regression_walk_forward",
+            "weights": self.weights,
+            "metrics": self.metrics,
+            "metadata": metadata or {},
+        }
+        temporary = destination.with_suffix(destination.suffix + ".tmp")
+        temporary.write_text(json.dumps(payload, ensure_ascii=False, allow_nan=False), encoding="utf-8")
+        temporary.replace(destination)
+
+    def load(self, path: str | Path) -> dict:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        if payload.get("model") != "logistic_regression_walk_forward":
+            raise ValueError("Unsupported saved ML model format.")
+        weights = payload.get("weights")
+        if not isinstance(weights, list) or len(weights) != 7:
+            raise ValueError("Saved ML model has invalid weights.")
+        self.weights = [float(value) for value in weights]
+        self.metrics = payload.get("metrics")
+        self.metadata = payload.get("metadata") or {}
+        return self.metadata
 
     def predict(self, candles: list[dict]) -> dict:
         if self.weights is None:
