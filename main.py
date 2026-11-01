@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import (
     QApplication, QFrame, QHBoxLayout, QLabel, QMainWindow, QPushButton,
     QStackedWidget, QVBoxLayout, QWidget, QLineEdit, QComboBox, QPlainTextEdit,
@@ -12,6 +13,13 @@ from PySide6.QtWidgets import (
 
 from auto_chart_detector import ChartScanner
 from analysis_service import AnalysisService
+from biquote_stream import BiQuoteSignalRClient
+from live_market_pipeline import LiveMarketPipeline
+
+
+class FeedBridge(QObject):
+    status_changed = Signal(str)
+    quote_received = Signal(object)
 
 
 class MainWindow(QMainWindow):
@@ -22,8 +30,19 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1050, 680)
         self.scanner = None
         self.analysis_service = AnalysisService()
+        self.market_pipeline = LiveMarketPipeline(store=self.analysis_service.store)
+        self.feed_bridge = FeedBridge()
+        self.feed_bridge.status_changed.connect(self._on_feed_status)
+        self.feed_bridge.quote_received.connect(self._on_feed_quote)
+        self.market_feed = BiQuoteSignalRClient(
+            symbols=("XAUUSD",),
+            on_quote=self._on_market_quote,
+            on_status=self.feed_bridge.status_changed.emit,
+        )
+        self.feed_thread = None
         self._build_ui()
         self._start_scanner()
+        self._start_market_feed()
 
     def _build_ui(self):
         self.setStyleSheet("""
@@ -190,6 +209,40 @@ class MainWindow(QMainWindow):
             button.style().polish(button)
 
 
+
+    def _start_market_feed(self):
+        def connect_feed():
+            try:
+                self.market_feed.start()
+            except Exception as exc:
+                self.feed_bridge.status_changed.emit(
+                    f"اتصال فید ناموفق بود: {type(exc).__name__}: {exc}"
+                )
+        self.feed_thread = threading.Thread(
+            target=connect_feed, name="BiQuoteSignalR", daemon=True
+        )
+        self.feed_thread.start()
+
+    def _on_market_quote(self, quote):
+        result = self.market_pipeline.on_quote(quote)
+        if result.get("accepted"):
+            self.feed_bridge.quote_received.emit(quote)
+        else:
+            self.feed_bridge.status_changed.emit(
+                f"تیک رد شد: {result.get('reason', 'نامشخص')}"
+            )
+
+    def _on_feed_status(self, message):
+        self.footer.setText(message)
+
+    def _on_feed_quote(self, quote):
+        self.data_value.setText("فید زنده")
+        self.symbol_value.setText(quote.instrument)
+        self.footer.setText(
+            f"{quote.source} | Bid: {quote.bid:.3f} | Ask: {quote.ask:.3f} "
+            f"| Mid: {quote.mid:.3f} | ذخیره کندل‌های کامل در حال انجام است."
+        )
+
     def _run_analysis(self):
         symbol = self.analysis_symbol.text().strip()
         timeframe = self.analysis_timeframe.currentText()
@@ -247,6 +300,11 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         if self.scanner is not None:
             self.scanner.stop()
+        if self.market_feed is not None:
+            try:
+                self.market_feed.stop()
+            except Exception:
+                pass
         event.accept()
 
 
