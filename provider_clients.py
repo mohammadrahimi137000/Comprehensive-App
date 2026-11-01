@@ -82,6 +82,8 @@ class SpotReference:
     state: str
     age_seconds: float | None
     is_indicative: bool = True
+    attribution_text: str | None = None
+    attribution_url: str | None = None
 
 
 class XausSpotAdapter:
@@ -112,3 +114,62 @@ class XausSpotAdapter:
             state=status,
             age_seconds=float(age) if age is not None else None,
         )
+
+
+
+class CorganoSpotAdapter:
+    """Rate-limited indicative spot reference adapter; never used as bid/ask."""
+
+    name = "corgano"
+
+    def __init__(
+        self, getter: JsonGetter = _get_json, timeout: float = 8.0,
+        minimum_interval_seconds: float = 240.0, max_age_seconds: float = 180.0,
+        clock: Callable[[], datetime] | None = None,
+    ):
+        if minimum_interval_seconds < 180 or max_age_seconds <= 0:
+            raise ValueError("Corgano polling must be at least 180 seconds")
+        self.getter = getter
+        self.timeout = timeout
+        self.minimum_interval_seconds = float(minimum_interval_seconds)
+        self.max_age_seconds = float(max_age_seconds)
+        self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self._last_request: datetime | None = None
+        self._cached: SpotReference | None = None
+
+    def get_spot(self) -> SpotReference:
+        now = self.clock()
+        if now.tzinfo is None:
+            raise ValueError("clock must return a timezone-aware datetime")
+        if self._cached is not None and self._last_request is not None:
+            elapsed = (now - self._last_request).total_seconds()
+            if 0 <= elapsed < self.minimum_interval_seconds:
+                return self._cached
+
+        payload = self.getter(
+            "https://goldprice.corgano.com/api/v1/latest", self.timeout
+        )
+        data = payload.get("data") or {}
+        timestamp = _parse_timestamp(str(data.get("as_of", "")))
+        age = (now.astimezone(timezone.utc) - timestamp).total_seconds()
+        if age < -2 or age > self.max_age_seconds:
+            raise RuntimeError(f"Corgano spot is outside freshness limit (age={age:.1f}s)")
+        price = float((data.get("price_usd") or {}).get("per_oz", 0))
+        if price <= 0:
+            raise RuntimeError("Corgano returned a non-positive spot price")
+        attribution = payload.get("attribution") or {}
+        if attribution.get("required") and not attribution.get("url"):
+            raise RuntimeError("Corgano attribution URL is missing")
+        result = SpotReference(
+            source="Corgano spot reference",
+            instrument="XAUUSD",
+            timestamp=timestamp,
+            price=price,
+            state="fresh",
+            age_seconds=age,
+            attribution_text=attribution.get("text"),
+            attribution_url=attribution.get("url"),
+        )
+        self._cached = result
+        self._last_request = now
+        return result
