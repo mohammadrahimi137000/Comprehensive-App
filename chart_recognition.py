@@ -89,7 +89,7 @@ def recognize_chart(
     timeframe = None
     timeframe_minutes = None
     for raw, minutes in sorted(_TIMEFRAMES.items(), key=lambda item: len(item[0]), reverse=True):
-        if re.search(rf"(?<![A-Z0-9]){raw}(?![A-Z0-9])", text) or re.search(rf"(?<!\\d){raw}(?!\\d)", compact):
+        if re.search(rf"(?<![A-Z0-9]){raw}(?![A-Z0-9])", text) or re.search(rf"(?<!\d){raw}(?!\d)", compact):
             timeframe, timeframe_minutes = raw, minutes
             break
 
