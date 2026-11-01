@@ -643,7 +643,9 @@ class MainWindow(QMainWindow):
         self.scanner = ChartScanner(parent=self)
         self.scanner.status_changed.connect(self._on_status)
         self.scanner.chart_found.connect(self._on_chart_found)
-        self.scanner.charts_updated.connect(self._on_charts_updated)
+        # Keep compatibility with lightweight scanner doubles used by tests.
+        if hasattr(self.scanner, "charts_updated"):
+            self.scanner.charts_updated.connect(self._on_charts_updated)
         self.scanner.chart_lost.connect(self._on_chart_lost)
         self.scanner.start()
 
