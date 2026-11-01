@@ -163,8 +163,13 @@ def recognize_chart(
                 "source": "screen_ocr_estimate",
             })
 
-    spacing = median([b["x"] - a["x"] for a, b in zip(geometry["candles"], geometry["candles"][1:])]) if len(geometry["candles"]) > 1 else None
-    px_per_minute = spacing / timeframe_minutes if spacing and timeframe_minutes else None
+    gaps = [b["x"] - a["x"] for a, b in zip(geometry["candles"], geometry["candles"][1:])]
+    spacing = median(gaps) if gaps else None
+    gap_deviation = (median([abs(value - spacing) for value in gaps]) / spacing) if spacing else None
+    time_spacing_consistent = bool(spacing and gap_deviation is not None and gap_deviation <= 0.25)
+    if spacing and not time_spacing_consistent:
+        warnings.append("Candle spacing is irregular; automatic time-axis calibration is disabled.")
+    px_per_minute = spacing / timeframe_minutes if spacing and timeframe_minutes and time_spacing_consistent else None
     roi_screen = {
         "left": roi["left"] + screen_origin[0],
         "top": roi["top"] + screen_origin[1],
@@ -176,7 +181,12 @@ def recognize_chart(
         "symbol": symbol, "timeframe": timeframe,
         "timeframe_minutes": timeframe_minutes,
         "price_axis": axis, "ohlc": candles,
-        "calibrated": bool(axis and timeframe_minutes and px_per_minute and len(candles) >= 8),
+        "calibrated": bool(axis and timeframe_minutes and px_per_minute and time_spacing_consistent and len(candles) >= 8),
+        "time_axis": {
+            "median_candle_spacing_px": spacing,
+            "median_absolute_deviation_ratio": gap_deviation,
+            "consistent": time_spacing_consistent,
+        },
         "pixels_per_minute": px_per_minute,
         "last_candle_x": geometry["candles"][-1]["x"] + screen_origin[0],
         "chart_roi_screen": roi_screen,
