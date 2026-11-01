@@ -18,6 +18,7 @@ $Python = ".\.venv\Scripts\python.exe"
     --collect-all PySide6 `
     --collect-all cv2 `
     --collect-all signalrcore `
+    --collect-all pytesseract `
     --hidden-import win32gui `
     --hidden-import win32process `
     --hidden-import pywintypes `

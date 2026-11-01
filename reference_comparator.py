@@ -53,6 +53,8 @@ def compare_reference_prices(
             "peer_deviation_bps": round(peer_diff_bps, 2),
             "outlier": outlier,
             "indicative_only": True,
+            "attribution_text": item.attribution_text,
+            "attribution_url": item.attribution_url,
         })
     return {
         "status": "compared",
