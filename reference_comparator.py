@@ -34,7 +34,8 @@ def compare_reference_prices(
     if not eligible:
         return {
             "status": "insufficient_reference_data", "broker_mid": broker_quote.mid,
-            "comparisons": [], "rejected": rejected, "outlier_sources": [],\n            "checked_at": now.astimezone(timezone.utc).isoformat(),
+            "comparisons": [], "rejected": rejected, "outlier_sources": [],
+            "checked_at": now.astimezone(timezone.utc).isoformat(),
         }
 
     reference_median = median(item.price for item in eligible)
@@ -63,5 +64,6 @@ def compare_reference_prices(
         "comparisons": comparisons,
         "rejected": rejected,
         "outlier_sources": outliers,
+        "checked_at": now.astimezone(timezone.utc).isoformat(),
         "note": "Indicative spot references are diagnostics only; they are not substituted for broker Bid/Ask.",
     }
