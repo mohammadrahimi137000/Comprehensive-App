@@ -40,6 +40,8 @@ class ResilientBiQuoteFeed:
             self.on_status(message)
 
     def _handle_quote(self, quote: Quote) -> bool:
+        if self._stop.is_set():
+            return False
         with self._lock:
             current = self._latest.get(quote.instrument)
             if current and quote.timestamp <= current.timestamp:
