@@ -34,7 +34,8 @@ def test_bootstrap_persists_history_by_source_and_timeframe(tmp_path):
             } for i in range(40)]
 
     bootstrapper = HistoryBootstrapper(
-        store=store, adapter=FakeAdapter(), minimum_existing=30, limit=100
+        store=store, adapter=FakeAdapter(), minimum_existing=30, limit=100,
+        market_is_open=lambda: True,
     )
     result = bootstrapper.bootstrap_if_needed()
     assert result["M1"]["status"] == "refreshed"
@@ -59,7 +60,7 @@ def test_recent_history_is_reused_but_stale_history_is_refreshed(tmp_path):
     clock = lambda: datetime(2026, 11, 1, 10, 40, tzinfo=timezone.utc)
     bootstrapper = HistoryBootstrapper(
         store=store, adapter=FakeAdapter(), minimum_existing=30,
-        limit=100, clock=clock,
+        limit=100, clock=clock, market_is_open=lambda: True,
     )
     bootstrapper.bootstrap_if_needed()
     first_call_count = len(calls)
@@ -69,7 +70,7 @@ def test_recent_history_is_reused_but_stale_history_is_refreshed(tmp_path):
     stale_clock = lambda: datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc)
     stale_bootstrapper = HistoryBootstrapper(
         store=store, adapter=FakeAdapter(), minimum_existing=30,
-        limit=100, clock=stale_clock,
+        limit=100, clock=stale_clock, market_is_open=lambda: True,
     )
     stale_bootstrapper.bootstrap_if_needed()
     assert len(calls) > first_call_count
