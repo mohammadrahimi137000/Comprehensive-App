@@ -26,7 +26,7 @@ from chart_projection import ChartProjection
 from forecast_overlay import ForecastOverlay
 from ml_engine import WalkForwardDirectionModel
 from tick_flow import TickPressure
-from news_engine import RssNewsClient
+from news_engine import RssNewsClient, BiQuoteContextClient
 from reference_monitor import SpotReferenceMonitor
 from history_bootstrap import HistoryBootstrapper
 
@@ -56,6 +56,7 @@ class MainWindow(QMainWindow):
         self.tick_pressure = TickPressure()
         self.latest_tick_pressure = self.tick_pressure.snapshot()
         self.news_client = RssNewsClient()
+        self.biquote_context = BiQuoteContextClient()
         self.overlay = ForecastOverlay()
         self.ocr_tesseract_path = ""
         self.feed_bridge = FeedBridge()
@@ -324,9 +325,16 @@ class MainWindow(QMainWindow):
             self.news_url_input = QLineEdit("https://feeds.finance.yahoo.com/rss/2.0/headline?s=GC%3DF&region=US&lang=en-US")
             self.news_url_input.setPlaceholderText("آدرس HTTPS منبع RSS")
             layout.addWidget(self.news_url_input)
-            news_button = QPushButton("دریافت و تحلیل تیترهای خبری")
-            news_button.clicked.connect(self._refresh_news)
+            news_button = QPushButton("دریافت خبر بازار و تقویم اقتصادی رسمی BiQuote")
+            news_button.clicked.connect(self._refresh_biquote_context)
             layout.addWidget(news_button)
+            self.biquote_news_output = QPlainTextEdit()
+            self.biquote_news_output.setReadOnly(True)
+            self.biquote_news_output.setPlaceholderText("خبرهای بازار و رویدادهای اقتصادی بااهمیت")
+            layout.addWidget(self.biquote_news_output, 1)
+            rss_button = QPushButton("دریافت تیترها از منبع RSS دلخواه")
+            rss_button.clicked.connect(self._refresh_news)
+            layout.addWidget(rss_button)
             self.news_output = QPlainTextEdit()
             self.news_output.setReadOnly(True)
             layout.addWidget(self.news_output, 1)
@@ -384,6 +392,13 @@ class MainWindow(QMainWindow):
             ))
         except Exception as exc:
             self.ml_output.setPlainText(f"آموزش انجام نشد: {exc}")
+
+    def _refresh_biquote_context(self):
+        try:
+            result = self.biquote_context.fetch(symbol="XAUUSD", countries=("US", "EU", "GB"), importance="high")
+            self.biquote_news_output.setPlainText(json.dumps(result, ensure_ascii=False, indent=2))
+        except Exception as exc:
+            self.biquote_news_output.setPlainText(f"دریافت خبر/تقویم ناموفق بود: {exc}")
 
     def _refresh_news(self):
         url = self.news_url_input.text().strip()
