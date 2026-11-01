@@ -108,11 +108,12 @@ def analyze_brains(values: list[dict]) -> dict:
         rsi = 100.0 if rsi_gain > 0 else 50.0
     else:
         rsi = 100.0 - 100.0 / (1.0 + rsi_gain / rsi_loss)
-    technical_score = _clamp((1 if fast > slow else -1 if fast < slow else 0) * 0.65
-                             + _clamp((rsi - 50) / 40) * 0.35)
+    ema_trend = 1 if fast > slow else -1 if fast < slow else 0
+    technical_score = _clamp(ema_trend * 0.65 + _clamp((rsi - 50) / 40) * 0.35)
     technical = {
         "score": round(technical_score, 4), "direction": _direction(technical_score),
-        "ema_fast": fast, "ema_slow": slow, "rsi_proxy": round(rsi, 2),
+        "ema_fast": round(fast, 6), "ema_slow": round(slow, 6),
+        "ema_trend": ema_trend, "rsi_proxy": round(rsi, 2),
     }
 
     weights = {
@@ -125,15 +126,23 @@ def analyze_brains(values: list[dict]) -> dict:
         + stat_score * weights["volatility_statistics"]
         + liquidity_score * weights["liquidity_proxy"]
     )
+    brains = {
+        "technical": technical, "price_action": price_action,
+        "volatility_statistics": volatility_brain,
+        "liquidity_proxy": liquidity_brain,
+    }
+    active_directions = [item["direction"] for item in brains.values()
+                         if item["direction"] != "neutral"]
+    bullish_count = active_directions.count("bullish")
+    bearish_count = active_directions.count("bearish")
     return {
-        "brains": {
-            "technical": technical, "price_action": price_action,
-            "volatility_statistics": volatility_brain,
-            "liquidity_proxy": liquidity_brain,
-        },
+        "brains": brains,
         "confluence": {
             "score": round(combined, 4), "direction": _direction(combined),
             "weights": weights, "weights_are_fixed": True,
+            "active_brains": len(active_directions),
+            "bullish_brains": bullish_count, "bearish_brains": bearish_count,
+            "disagreement": bullish_count > 0 and bearish_count > 0,
             "weighting_note": "Weights are transparent starting values; not yet learned from live out-of-sample engine performance.",
         },
     }
