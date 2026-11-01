@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from datetime import datetime, timezone
 from typing import Callable
 
@@ -63,17 +64,17 @@ class SpotReferenceMonitor:
             if (now - quote.timestamp).total_seconds() < -2:
                 continue
 
-            monotonic_now = __import__("time").monotonic()
+            monotonic_now = time.monotonic()
             if monotonic_now - self._last_xaus >= self.xaus_interval_seconds:
+                self._last_xaus = monotonic_now
                 try:
                     self._references["XAUS"] = self.xaus.get_spot()
-                    self._last_xaus = monotonic_now
                 except Exception as exc:
                     self._status(f"XAUS reference unavailable: {type(exc).__name__}")
             if monotonic_now - self._last_corgano >= self.corgano_interval_seconds:
+                self._last_corgano = monotonic_now
                 try:
                     self._references["Corgano"] = self.corgano.get_spot()
-                    self._last_corgano = monotonic_now
                 except Exception as exc:
                     self._status(f"Corgano reference unavailable: {type(exc).__name__}")
 
