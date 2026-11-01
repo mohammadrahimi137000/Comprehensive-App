@@ -17,6 +17,7 @@ import numpy as np
 import win32gui
 import win32process
 from PySide6.QtCore import QCoreApplication, QThread, Signal
+from chart_vision import extract_candle_geometry
 
 
 class ChartScanner(QThread):
@@ -143,10 +144,22 @@ class ChartScanner(QThread):
                         frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
                         result = self.analyze_image(frame)
                         if result["is_chart"]:
+                            geometry = extract_candle_geometry(frame)
+                            roi = geometry.get("roi")
+                            chart_roi_screen = None
+                            if roi:
+                                chart_roi_screen = {
+                                    "left": region["left"] + roi["left"],
+                                    "top": region["top"] + roi["top"],
+                                    "right": region["left"] + roi["right"],
+                                    "bottom": region["top"] + roi["bottom"],
+                                }
                             found = {
                                 **window,
                                 "confidence": result["confidence"],
                                 "candle_columns": result["candle_columns"],
+                                "chart_roi_pixels": roi,
+                                "chart_roi_screen": chart_roi_screen,
                             }
                             break
 
