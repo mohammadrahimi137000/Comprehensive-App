@@ -1,11 +1,14 @@
 """Automatic chart-window scanner for Windows.
 
-This module detects likely chart windows from visible screen content. It does not
-read OHLC data or generate trading signals; it only reports a candidate window.
+The scanner detects likely chart windows from visible desktop content. It does not
+read OHLC data, identify symbols/timeframes, or generate trading signals.
+Run this file directly for a console-based detection monitor, or import
+ChartScanner from the main desktop application.
 """
 from __future__ import annotations
 
 import os
+import sys
 import threading
 from typing import Any
 
@@ -14,7 +17,7 @@ import mss
 import numpy as np
 import win32gui
 import win32process
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import QCoreApplication, QThread, Signal
 
 
 class ChartScanner(QThread):
@@ -71,11 +74,14 @@ class ChartScanner(QThread):
             return empty
 
         count = len(columns)
-        # Require a meaningful horizontal spread to reduce UI/icon false positives.
         spread = (columns[-1] - columns[0]) / max(1, width)
         is_chart = count >= 8 and spread >= 0.18
         confidence = min(0.95, 0.35 + count / 35) if is_chart else 0.0
-        return {"is_chart": is_chart, "confidence": round(confidence, 2), "candle_columns": count}
+        return {
+            "is_chart": is_chart,
+            "confidence": round(confidence, 2),
+            "candle_columns": count,
+        }
 
     def detect_candles(self, image: np.ndarray) -> bool:
         """Backward-compatible boolean detector API."""
@@ -98,9 +104,15 @@ class ChartScanner(QThread):
                 if right - left < 300 or bottom - top < 180:
                     return
                 windows.append({
-                    "hwnd": int(hwnd), "title": title, "process_id": int(pid),
-                    "left": left, "top": top, "right": right, "bottom": bottom,
-                    "width": right - left, "height": bottom - top,
+                    "hwnd": int(hwnd),
+                    "title": title,
+                    "process_id": int(pid),
+                    "left": left,
+                    "top": top,
+                    "right": right,
+                    "bottom": bottom,
+                    "width": right - left,
+                    "height": bottom - top,
                 })
             except Exception:
                 return
@@ -116,14 +128,20 @@ class ChartScanner(QThread):
         bottom = min(window["bottom"], virtual["top"] + virtual["height"])
         if right - left < 300 or bottom - top < 180:
             return None
-        return {"left": left, "top": top, "width": right - left, "height": bottom - top}
+        return {
+            "left": left,
+            "top": top,
+            "width": right - left,
+            "height": bottom - top,
+        }
 
     def run(self):
         self.status_changed.emit("در حال پایش پنجره‌های قابل مشاهده ویندوز…")
         while not self._stop_event.is_set():
             try:
                 found = None
-                with mss.mss() as screen:
+                # MSS 10+ exposes the supported context manager as MSS().
+                with mss.MSS() as screen:
                     virtual = screen.monitors[0]
                     for window in self.get_visible_windows():
                         region = self._intersection(window, virtual)
@@ -153,7 +171,9 @@ class ChartScanner(QThread):
                     if self.last_found is not None:
                         self.chart_lost.emit()
                     self.last_found = None
-                    self.status_changed.emit("در حال جست‌وجو؛ هنوز چارت معتبری پیدا نشده است.")
+                    self.status_changed.emit(
+                        "در حال جست‌وجو؛ هنوز چارت معتبری پیدا نشده است."
+                    )
             except Exception as exc:
                 self.status_changed.emit(f"خطای پایش چارت: {exc}")
             self._stop_event.wait(self.interval_seconds)
@@ -162,3 +182,28 @@ class ChartScanner(QThread):
         self._stop_event.set()
         if self.isRunning():
             self.wait(timeout_ms)
+
+
+def main() -> int:
+    """Run the detector independently and print status to the terminal."""
+    app = QCoreApplication(sys.argv)
+    scanner = ChartScanner(interval_seconds=2.0)
+    scanner.status_changed.connect(lambda message: print(message, flush=True))
+    scanner.chart_found.connect(
+        lambda info: print(
+            "CHART FOUND: "
+            f"{info.get('title')} | confidence={info.get('confidence', 0):.0%} | "
+            f"candle-like columns={info.get('candle_columns')}",
+            flush=True,
+        )
+    )
+    scanner.chart_lost.connect(
+        lambda: print("CHART LOST: no chart candidate currently visible.", flush=True)
+    )
+    app.aboutToQuit.connect(scanner.stop)
+    scanner.start()
+    return app.exec()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
