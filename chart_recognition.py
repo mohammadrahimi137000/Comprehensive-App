@@ -179,6 +179,7 @@ def recognize_chart(
     result = {
         **empty,
         "symbol": symbol, "timeframe": timeframe,
+        "screen_origin": [screen_origin[0], screen_origin[1]],
         "timeframe_minutes": timeframe_minutes,
         "price_axis": axis, "ohlc": candles,
         "calibrated": bool(axis and timeframe_minutes and px_per_minute and time_spacing_consistent and len(candles) >= 8),
