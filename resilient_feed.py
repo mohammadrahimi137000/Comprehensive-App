@@ -39,15 +39,16 @@ class ResilientBiQuoteFeed:
         if self.on_status:
             self.on_status(message)
 
-    def _handle_quote(self, quote: Quote):
+    def _handle_quote(self, quote: Quote) -> bool:
         with self._lock:
             current = self._latest.get(quote.instrument)
             if current and quote.timestamp <= current.timestamp:
-                return
+                return False
             self._latest[quote.instrument] = quote
             self._last_update_monotonic = time.monotonic()
         if self.on_quote:
             self.on_quote(quote)
+        return True
 
     def get_latest_quote(self, symbol: str = "XAUUSD") -> Quote | None:
         with self._lock:
@@ -65,19 +66,23 @@ class ResilientBiQuoteFeed:
         self._thread.start()
 
     def _fallback_loop(self):
-        while not self._stop.wait(self.poll_interval_seconds):
+        delay = self.poll_interval_seconds
+        while not self._stop.wait(delay):
             with self._lock:
                 age = time.monotonic() - self._last_update_monotonic if self._last_update_monotonic else float("inf")
             if age < self.stale_after_seconds:
+                delay = self.poll_interval_seconds
                 continue
+            recovered = False
             for symbol in self.symbols:
                 try:
                     quote = self.rest.get_quote(symbol)
-                    if quote is not None:
-                        self._handle_quote(quote)
+                    if quote is not None and self._handle_quote(quote):
+                        recovered = True
                         self._status(f"BiQuote REST fallback active for {symbol}; SignalR stream is stale.")
                 except Exception as exc:
                     self._status(f"BiQuote REST fallback unavailable: {type(exc).__name__}")
+            delay = self.poll_interval_seconds if recovered else min(300.0, delay * 2.0)
 
     def stop(self):
         self._stop.set()
