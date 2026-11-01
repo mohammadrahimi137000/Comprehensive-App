@@ -6,6 +6,7 @@ import sys
 import threading
 
 import cv2
+import win32gui
 
 from PySide6.QtCore import QObject, Qt, Signal, QTimer
 from PySide6.QtWidgets import (
@@ -413,8 +414,23 @@ class MainWindow(QMainWindow):
         self.news_output.setPlainText(json.dumps(result, ensure_ascii=False, indent=2))
 
     def _refresh_current_overlay(self):
-        if self.current_chart_info and self.current_chart_info.get("recognition"):
-            self._try_show_forecast_overlay(self.current_chart_info["recognition"])
+        if not self.current_chart_info:
+            self.overlay.clear()
+            return
+        try:
+            info = self.current_chart_info
+            left, top, right, bottom = win32gui.GetWindowRect(info["hwnd"])
+            info.update({"left": left, "top": top, "right": right, "bottom": bottom})
+            screenshot_path = capture_window_screenshot(info["hwnd"])
+            image = cv2.imread(screenshot_path)
+            recognition = recognize_chart(
+                image, screen_origin=(left, top), window_title=info.get("title", ""),
+                tesseract_cmd=self.tesseract_path_input.text().strip(),
+            )
+            info["recognition"] = recognition
+            self._try_show_forecast_overlay(recognition)
+        except Exception:
+            self.overlay.clear()
 
     def _try_show_forecast_overlay(self, recognition: dict):
         self.overlay.clear()
