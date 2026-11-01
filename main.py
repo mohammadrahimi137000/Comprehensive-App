@@ -5,7 +5,9 @@ import json
 import sys
 import threading
 
-from PySide6.QtCore import QObject, Qt, Signal
+import cv2
+
+from PySide6.QtCore import QObject, Qt, Signal, QTimer
 from PySide6.QtWidgets import (
     QApplication, QFrame, QHBoxLayout, QLabel, QMainWindow, QPushButton,
     QStackedWidget, QVBoxLayout, QWidget, QLineEdit, QComboBox, QPlainTextEdit,
@@ -19,6 +21,12 @@ from live_market_pipeline import LiveMarketPipeline
 from trade_journal import TradeJournal
 from screenshot_capture import capture_window_screenshot
 from performance_engine import analyze_performance
+from chart_recognition import recognize_chart
+from chart_projection import ChartProjection
+from forecast_overlay import ForecastOverlay
+from ml_engine import WalkForwardDirectionModel
+from tick_flow import TickPressure
+from news_engine import RssNewsClient
 
 
 class FeedBridge(QObject):
@@ -37,6 +45,12 @@ class MainWindow(QMainWindow):
         self.trade_journal = TradeJournal(self.analysis_service.store.database_path)
         self.current_chart_info = None
         self.market_pipeline = LiveMarketPipeline(store=self.analysis_service.store)
+        self.ml_model = WalkForwardDirectionModel()
+        self.tick_pressure = TickPressure()
+        self.latest_tick_pressure = self.tick_pressure.snapshot()
+        self.news_client = RssNewsClient()
+        self.overlay = ForecastOverlay()
+        self.ocr_tesseract_path = ""
         self.feed_bridge = FeedBridge()
         self.feed_bridge.status_changed.connect(self._on_feed_status)
         self.feed_bridge.quote_received.connect(self._on_feed_quote)
@@ -274,15 +288,37 @@ class MainWindow(QMainWindow):
             self.journal_table.setEditTriggers(self.journal_table.EditTrigger.NoEditTriggers)
             layout.addWidget(self.journal_table, 1)
             self._refresh_journal()
-        else:
-            note = QLabel(
-                "این بخش در نقشه راه قرار دارد. تا اتصال منبع داده معتبر و تکمیل "
-                "موتور مربوطه، هیچ خروجی معاملاتی در این صفحه تولید نمی‌شود."
-            )
+
+        elif index == 7:
+            note = QLabel("ابزارهای تشخیص متن، یادگیری ماشین، خبر و فشار تیک. برای OCR باید Tesseract روی ویندوز نصب باشد؛ مسیر اجرایی آن را در صورت نیاز وارد کنید.")
             note.setWordWrap(True)
             note.setObjectName("muted")
             layout.addWidget(note)
-            layout.addStretch()
+            self.tesseract_path_input = QLineEdit()
+            self.tesseract_path_input.setPlaceholderText(r"مسیر اختیاری tesseract.exe")
+            self.tesseract_path_input.setText(self.ocr_tesseract_path)
+            layout.addWidget(self.tesseract_path_input)
+            ml_button = QPushButton("آموزش و ارزیابی مدل ML روی کندل‌های محلی")
+            ml_button.clicked.connect(self._train_ml_model)
+            layout.addWidget(ml_button)
+            self.ml_output = QPlainTextEdit()
+            self.ml_output.setReadOnly(True)
+            self.ml_output.setPlaceholderText("نتیجه آموزش walk-forward اینجا نمایش داده می‌شود.")
+            layout.addWidget(self.ml_output, 1)
+            self.news_url_input = QLineEdit("https://feeds.finance.yahoo.com/rss/2.0/headline?s=GC%3DF&region=US&lang=en-US")
+            self.news_url_input.setPlaceholderText("آدرس HTTPS منبع RSS")
+            layout.addWidget(self.news_url_input)
+            news_button = QPushButton("دریافت و تحلیل تیترهای خبری")
+            news_button.clicked.connect(self._refresh_news)
+            layout.addWidget(news_button)
+            self.news_output = QPlainTextEdit()
+            self.news_output.setReadOnly(True)
+            layout.addWidget(self.news_output, 1)
+            self.flow_output = QPlainTextEdit()
+            self.flow_output.setReadOnly(True)
+            self.flow_output.setMaximumHeight(130)
+            self.flow_output.setPlainText(json.dumps(self.latest_tick_pressure, ensure_ascii=False, indent=2))
+            layout.addWidget(self.flow_output)
         layout.addStretch(1)
         return page
 
@@ -312,6 +348,55 @@ class MainWindow(QMainWindow):
 
 
 
+
+
+    def _train_ml_model(self):
+        try:
+            rows = self.analysis_service.store.get_candles("XAUUSD", "M1", limit=10000, source="BiQuote SignalR")
+            if len(rows) < 180:
+                rows = self.analysis_service.store.get_candles("XAUUSD", "M1", limit=10000)
+            metrics = self.ml_model.fit(rows, horizon=15)
+            prediction = self.ml_model.predict(rows)
+            self.ml_output.setPlainText(json.dumps(
+                {"evaluation": metrics, "latest_prediction": prediction},
+                ensure_ascii=False, indent=2
+            ))
+        except Exception as exc:
+            self.ml_output.setPlainText(f"آموزش انجام نشد: {exc}")
+
+    def _refresh_news(self):
+        url = self.news_url_input.text().strip()
+        result = self.news_client.fetch([url] if url else None)
+        self.news_output.setPlainText(json.dumps(result, ensure_ascii=False, indent=2))
+
+    def _try_show_forecast_overlay(self, recognition: dict):
+        self.overlay.clear()
+        if not recognition.get("calibrated") or recognition.get("symbol") != "XAUUSD":
+            return
+        if recognition.get("timeframe_minutes") != 1:
+            return
+        axis = recognition["price_axis"]
+        roi = recognition["chart_roi_screen"]
+        origin_x = self.current_chart_info["left"]
+        origin_y = self.current_chart_info["top"]
+        try:
+            result = self.analysis_service.analyze_latest(
+                "XAUUSD", "M1", source="BiQuote SignalR"
+            )
+            projection = ChartProjection(
+                chart_left=roi["left"], chart_top=roi["top"],
+                chart_right=roi["right"], chart_bottom=roi["bottom"],
+                price_at_top=axis["price_at_top"],
+                y_at_top=axis["y_at_top"] + origin_y,
+                price_at_bottom=axis["price_at_bottom"],
+                y_at_bottom=axis["y_at_bottom"] + origin_y,
+                last_candle_x=recognition["last_candle_x"],
+                pixels_per_minute=recognition["pixels_per_minute"],
+            )
+            projection.project_forecast(result["forecast_points"])
+            self.overlay.set_forecast(projection, result["forecast_points"])
+        except Exception:
+            self.overlay.clear()
 
     def _run_latest_analysis(self):
         return self.analysis_service.analyze_latest("XAUUSD", "M1")
@@ -428,6 +513,7 @@ class MainWindow(QMainWindow):
     def _on_market_quote(self, quote):
         result = self.market_pipeline.on_quote(quote)
         if result.get("accepted"):
+            self.latest_tick_pressure = self.tick_pressure.update(quote)
             self.feed_bridge.quote_received.emit(quote)
         else:
             self.feed_bridge.status_changed.emit(
@@ -443,6 +529,10 @@ class MainWindow(QMainWindow):
             f"{quote.source} | Bid: {quote.bid:.3f} | Ask: {quote.ask:.3f} "
             f"| Mid: {quote.mid:.3f} | ذخیره کندل‌های کامل در حال انجام است."
         )
+        if hasattr(self, "flow_output"):
+            self.flow_output.setPlainText(json.dumps(
+                self.latest_tick_pressure, ensure_ascii=False, indent=2
+            ))
 
     def _run_analysis(self):
         symbol = self.analysis_symbol.text().strip()
@@ -479,24 +569,42 @@ class MainWindow(QMainWindow):
         self.current_chart_info = info
         title = info.get("title", "پنجره ناشناس")
         confidence = info.get("confidence", 0)
-        details = (
-            f"{title}\nشناسه پنجره: {info.get('hwnd')} | "
-            f"PID: {info.get('process_id')}\n"
-            f"اعتماد بصری: {confidence:.0%} | "
-            f"ستون‌های شبیه کندل: {info.get('candle_columns')}"
-        )
+        recognition = {}
+        try:
+            screenshot_path = capture_window_screenshot(info["hwnd"])
+            image = cv2.imread(screenshot_path)
+            recognition = recognize_chart(
+                image, screen_origin=(info["left"], info["top"]),
+                window_title=title,
+                tesseract_cmd=self.tesseract_path_input.text().strip() if hasattr(self, "tesseract_path_input") else self.ocr_tesseract_path,
+            )
+        except Exception as exc:
+            recognition = {"recognition_warnings": [str(exc)], "symbol": None, "timeframe": None, "calibrated": False}
+        info["recognition"] = recognition
+        symbol = recognition.get("symbol") or "نامشخص"
+        timeframe = recognition.get("timeframe") or "نامشخص"
         self.frame_value.setText(title)
-        self.symbol_value.setText("از روی تصویر قابل تأیید نیست")
+        self.symbol_value.setText(symbol)
+        details = (
+            f"{title}\nشناسه پنجره: {info.get('hwnd')} | PID: {info.get('process_id')}\n"
+            f"اعتماد تشخیص بصری: {confidence:.0%}\n"
+            f"نماد OCR: {symbol} | تایم‌فریم OCR: {timeframe}\n"
+            f"کالیبراسیون محور: {'تأیید اولیه' if recognition.get('calibrated') else 'نامعتبر/ناکافی'}\n"
+            f"کندل‌های OHLC تخمینی: {len(recognition.get('ohlc', []))}\n"
+            + "\n".join(recognition.get("recognition_warnings", []))
+        )
         self.chart_status.setText(
-            "چارت احتمالی شناسایی شد. این نتیجه هنوز تأیید نماد یا سیگنال نیست."
+            "چارت احتمالی شناسایی شد؛ مقادیر OCR تخمینی‌اند و فقط با داده بازار مستقل مقایسه می‌شوند."
         )
         self.detector_result.setText(details)
         self.footer.setText(
-            "پنجره پیدا شد؛ استخراج قیمت، تایم‌فریم و تولید پیش‌بینی هنوز پیاده‌سازی نشده است."
+            "تشخیص پنجره فعال است؛ Overlay فقط در صورت شناسایی XAUUSD/M1 و کالیبراسیون معتبر روشن می‌شود."
         )
+        self._try_show_forecast_overlay(recognition)
 
     def _on_chart_lost(self):
         self.current_chart_info = None
+        self.overlay.clear()
         self.frame_value.setText("در انتظار")
         self.chart_status.setText("چارت قبلی دیگر در صفحه قابل شناسایی نیست.")
 
@@ -504,6 +612,7 @@ class MainWindow(QMainWindow):
         self._closing = True
         if self.scanner is not None:
             self.scanner.stop()
+        self.overlay.clear()
         if self.market_feed is not None:
             try:
                 self.market_feed.stop()
