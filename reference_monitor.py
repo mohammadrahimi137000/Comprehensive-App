@@ -58,6 +58,8 @@ class SpotReferenceMonitor:
     def _run(self):
         self._status("مقایسه قیمت مرجع مستقل آماده است؛ تا دریافت تیک زنده هیچ درخواست Spot ارسال نمی‌شود.")
         while not self._stop.wait(1.0):
+            if self._stop.is_set():
+                break
             now = self.clock()
             quote = self.latest_broker_quote()
             if quote is None or (now - quote.timestamp).total_seconds() > self.broker_max_age_seconds:
@@ -79,6 +81,8 @@ class SpotReferenceMonitor:
                 except Exception as exc:
                     self._status(f"Corgano reference unavailable: {type(exc).__name__}")
 
+            if self._stop.is_set():
+                break
             if self._references and monotonic_now - self._last_report >= 5.0:
                 self._last_report = monotonic_now
                 result = compare_reference_prices(quote, list(self._references.values()), now=now)
