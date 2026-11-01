@@ -29,6 +29,8 @@ def test_forecast_has_15_ordered_points_and_normalized_scenarios():
     assert sum(result["scenarios"].values()) == pytest.approx(100.0)
     assert all(p["low"] <= p["mid"] <= p["high"] for p in result["forecast_points"])
     assert result["status"] == "research_only"
+    assert result["forecast_method"] == "momentum_blended_drift_with_atr_uncertainty_fan"
+    assert result["forecast_confidence"] == "low_unvalidated"
 
 
 def test_forecast_points_follow_input_timeframe():

@@ -17,13 +17,27 @@ def sample():
     return rows
 
 
-def test_returns_separate_static_and_dynamic_structure():
+def test_returns_separate_static_dynamic_and_swing_structure():
     result = analyze_structure(sample())
     assert "static_support_zones" in result
     assert "static_resistance_zones" in result
     assert result["dynamic_support"] is not None
     assert result["dynamic_resistance"] is not None
     assert result["dynamic_support"]["points"] >= 2
+    assert result["swing_structure"]["trend"] in {"bullish", "bearish", "range_or_transition"}
+    assert result["structure_break"]["type"] in {"BOS", "CHoCH", "none"}
+    assert isinstance(result["liquidity_sweeps"], list)
+
+
+def test_nearest_support_is_not_above_price_and_resistance_not_below():
+    result = analyze_structure(sample())
+    price = result["last_close"]
+    support = result["nearest_support_zone"]
+    resistance = result["nearest_resistance_zone"]
+    if support:
+        assert support["lower"] <= price
+    if resistance:
+        assert resistance["upper"] >= price
 
 
 def test_overlap_zone_is_high_priority_but_not_standalone_signal():

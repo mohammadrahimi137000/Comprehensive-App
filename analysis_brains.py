@@ -98,8 +98,8 @@ def analyze_brains(values: list[dict]) -> dict:
     }
 
     closes_for_ema = [item.close for item in candles]
-    fast = _ema(closes_for_ema[-30:], 8)
-    slow = _ema(closes_for_ema[-60:], 24)
+    fast = _ema(closes_for_ema[-60:], min(12, len(closes_for_ema[-60:])))
+    slow = _ema(closes_for_ema[-120:], min(26, len(closes_for_ema[-120:])))
     # Use all fourteen completed close-to-close changes, not only the final pair.
     changes = [b.close - a.close for a, b in zip(candles[-15:], candles[-14:])]
     rsi_gain = mean([max(change, 0.0) for change in changes])

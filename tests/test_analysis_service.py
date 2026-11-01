@@ -24,6 +24,11 @@ def test_service_analyzes_and_persists_latest_candles(tmp_path):
     store.upsert_candles("spot", "XAUUSD", "M1", rows())
     result = AnalysisService(store=store).analyze_latest("XAUUSD", "M1", "spot")
     assert len(result["forecast_points"]) == 15
+    assert result["entry_readiness"]["status"] == "no_trade"
+    assert result["entry_readiness"]["entry_allowed"] is False
+    assert result["forecast_quality"]["probabilities_calibrated"] is False
+    assert "ema_trend_consistent" in result["analysis_alignment"]
+    assert "nearest_support_zone" in result
     saved = store.latest_forecasts("XAUUSD")
     assert saved[0]["payload"]["source"] == "spot"
     assert saved[0]["payload"]["symbol"] == "XAUUSD"

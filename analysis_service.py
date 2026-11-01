@@ -8,6 +8,12 @@ from analysis_brains import analyze_brains
 from ml_engine import WalkForwardDirectionModel
 
 
+def _zone_distance(price: float, zone: dict) -> float:
+    if zone["lower"] <= price <= zone["upper"]:
+        return 0.0
+    return min(abs(price - zone["lower"]), abs(price - zone["upper"]))
+
+
 class AnalysisService:
     def __init__(self, store: MarketStore | None = None,
                  engine: AnalysisEngine | None = None):
@@ -32,8 +38,6 @@ class AnalysisService:
                 raise ValueError(
                     f"داده کافی از یک منبع مستقل وجود ندارد؛ حداقل ۳۰ کندل از یک منبع لازم است. مجموع منابع: {total}"
                 )
-            # Select one source only. Never concatenate different brokers/spot references
-            # into one synthetic candle sequence.
             selected_source = eligible[0]["source"]
 
         timeframe_key = timeframe.strip().upper()
@@ -45,23 +49,18 @@ class AnalysisService:
         if timeframe_minutes is None:
             raise ValueError(f"تایم‌فریم پشتیبانی نمی‌شود: {timeframe_key}")
 
-        # UI aliases are categories, not literal SQLite source names.
         if selected_source:
             source_filter = selected_source.strip().lower()
             if source_filter in {"spot", "broker"}:
                 available_sources = self.store.list_sources(symbol, timeframe_key)
                 if source_filter == "spot":
-                    matches = [
-                        item for item in available_sources
-                        if any(tag in item["source"].lower()
-                               for tag in ("spot", "xaus", "corgano"))
-                    ]
+                    matches = [item for item in available_sources
+                               if any(tag in item["source"].lower()
+                                      for tag in ("spot", "xaus", "corgano"))]
                 else:
-                    matches = [
-                        item for item in available_sources
-                        if any(tag in item["source"].lower()
-                               for tag in ("biquote", "broker"))
-                    ]
+                    matches = [item for item in available_sources
+                               if any(tag in item["source"].lower()
+                                      for tag in ("biquote", "broker"))]
                 if not matches:
                     raise ValueError(
                         f"هیچ منبع {'Spot' if source_filter == 'spot' else 'Broker'} "
@@ -77,15 +76,47 @@ class AnalysisService:
             raise ValueError(
                 f"داده کافی نیست: حداقل ۳۰ کندل کامل لازم است؛ فعلاً {len(candles)} کندل موجود است."
             )
-        result = self.engine.analyze(
-            candles, timeframe_minutes=timeframe_minutes
-        )
-        result["market_structure"] = analyze_structure(candles)
+
+        result = self.engine.analyze(candles, timeframe_minutes=timeframe_minutes)
+        structure = analyze_structure(candles)
+        result["market_structure"] = structure
         result.update(analyze_brains(candles))
+
+        # Use support/resistance zones rather than isolated pivot points. A
+        # zone containing the latest price is a valid nearest reaction zone.
+        price = float(result["last_close"])
+        support_zone = structure["nearest_support_zone"]
+        resistance_zone = structure["nearest_resistance_zone"]
+        result["nearest_support"] = support_zone["center"] if support_zone else None
+        result["nearest_resistance"] = resistance_zone["center"] if resistance_zone else None
+        result["nearest_support_zone"] = support_zone
+        result["nearest_resistance_zone"] = resistance_zone
+        result["support_distance"] = round(_zone_distance(price, support_zone), 6) if support_zone else None
+        result["resistance_distance"] = round(_zone_distance(price, resistance_zone), 6) if resistance_zone else None
+        result["risk_reference"]["invalidation_level"] = (
+            resistance_zone["upper"] if result["directional_bias"] == "bearish" and resistance_zone
+            else support_zone["lower"] if support_zone else None
+        )
+
+        confluence, technical = result["confluence"], result["brains"]["technical"]
+        bias = result["directional_bias"]
+        result["analysis_alignment"] = {
+            "forecast_bias": bias,
+            "technical_direction": technical["direction"],
+            "multi_brain_direction": confluence["direction"],
+            "ema_trend_consistent": technical["ema_trend"] == result["indicators"]["trend"],
+            "brains_disagree": confluence["disagreement"],
+            "forecast_vs_confluence_conflict": (
+                bias != "neutral" and confluence["direction"] != "neutral"
+                and bias != confluence["direction"]
+            ),
+            "note": "Conflicting brains lower confidence; no single brain is an entry trigger.",
+        }
+
         metadata = getattr(self.ml_model, "metadata", {})
         if (self.ml_model.weights is not None
                 and metadata.get("symbol") == symbol.strip().upper()
-                and metadata.get("timeframe") == timeframe.strip().upper()
+                and metadata.get("timeframe") == timeframe_key
                 and metadata.get("source") == selected_source):
             result["ml_prediction"] = self.ml_model.predict(candles)
         else:
@@ -93,8 +124,30 @@ class AnalysisService:
                 "status": "not_available",
                 "reason": "No trained model matches this symbol, timeframe and data source.",
             }
+
+        # Historical OHLC cannot prove a fresh quote, chart extraction, spread,
+        # execution conditions or order-book confirmation. Never emit a trade.
+        blockers = [
+            "fresh_live_quote_not_verified",
+            "chart_price_extraction_not_verified",
+            "spread_and_execution_risk_not_verified",
+            "price_action_entry_confirmation_required",
+        ]
+        if confluence["disagreement"] or result["analysis_alignment"]["forecast_vs_confluence_conflict"]:
+            blockers.append("analysis_brains_conflict")
+        result["entry_readiness"] = {
+            "status": "no_trade", "entry_allowed": False, "blockers": blockers,
+            "note": "Research analysis only; this service does not emit a tradable entry signal.",
+        }
+        result["forecast_quality"] = {
+            "status": "heuristic_unvalidated",
+            "probabilities_calibrated": False,
+            "out_of_sample_calibration_available": False,
+            "note": "Track forecasts against later completed candles before treating scores as probabilities.",
+        }
+
         result["symbol"] = symbol.strip().upper()
-        result["timeframe"] = timeframe.strip().upper()
+        result["timeframe"] = timeframe_key
         result["source"] = selected_source
         self.store.save_forecast(
             source="analysis_engine", symbol=symbol, timeframe=timeframe, payload=result

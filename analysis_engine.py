@@ -154,8 +154,13 @@ class AnalysisEngine:
         for step in range(1, steps + 1):
             elapsed_minutes = step * timeframe_minutes
             decay = 1.0 - 0.55 * (step / steps)
-            drift = score * atr * 0.10 * step * decay
-            uncertainty = atr * (0.35 * step ** 0.5)
+            recent_drift_per_candle = (closes[-1] - closes[-6]) / 5.0
+            drift_per_candle = (
+                0.55 * score * atr * 0.10
+                + 0.45 * recent_drift_per_candle * 0.20
+            )
+            drift = drift_per_candle * step * decay
+            uncertainty = atr * (0.30 * step ** 0.5)
             points.append({
                 "minute": elapsed_minutes,
                 "mid": round(last.close + drift, 6),
@@ -185,6 +190,8 @@ class AnalysisEngine:
             "scenarios": probabilities,
             "directional_bias": "bullish" if direction > 0 else "bearish",
             "forecast_points": points,
+            "forecast_method": "momentum_blended_drift_with_atr_uncertainty_fan",
+            "forecast_confidence": "low_unvalidated",
             "risk_reference": {
                 "invalidation_level": invalidation,
                 "note": "Reference only; confirm spread, execution price, and position risk separately.",
