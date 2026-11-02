@@ -11,10 +11,11 @@ import numpy as np
 
 def _candle_mask(image: np.ndarray) -> np.ndarray:
     hsv = cv2.cvtColor(image[:, :, :3], cv2.COLOR_BGR2HSV)
-    green = cv2.inRange(hsv, np.array([35, 65, 65]), np.array([95, 255, 255]))
-    red_a = cv2.inRange(hsv, np.array([0, 70, 65]), np.array([12, 255, 255]))
-    red_b = cv2.inRange(hsv, np.array([165, 70, 65]), np.array([180, 255, 255]))
-    mask = cv2.bitwise_or(green, cv2.bitwise_or(red_a, red_b))
+    # Trading platforms use different candle palettes (green/red, teal/red,
+    # blue/orange, etc.). Detect saturated candle colors broadly; geometric
+    # validation in ChartScanner rejects most unrelated UI decorations.
+    saturated = cv2.inRange(hsv, np.array([0, 55, 55]), np.array([180, 255, 255]))
+    mask = saturated
     return cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8))
 
 
