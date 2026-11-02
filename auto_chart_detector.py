@@ -66,21 +66,21 @@ class ChartScanner(QThread):
         geometry = extract_candle_geometry(image[:, :, :3])
         candles = geometry.get("candles", [])
         count = len(candles)
-        if not geometry.get("is_chart") or count < 12:
+        if not geometry.get("is_chart") or count < 8:
             return {**empty, "candle_columns": count}
 
         centers = np.asarray([item["x"] for item in candles], dtype=float)
         gaps = np.diff(centers)
-        if len(gaps) < 11 or np.any(gaps <= 0):
+        if len(gaps) < 7 or np.any(gaps <= 0):
             return {**empty, "candle_columns": count}
 
         median_gap = float(np.median(gaps))
-        if median_gap < max(3.0, width * 0.004) or median_gap > width * 0.12:
+        if median_gap < max(3.0, width * 0.004) or median_gap > width * 0.16:
             return {**empty, "candle_columns": count}
 
         gap_cv = float(np.std(gaps) / max(1.0, np.mean(gaps)))
         spread = float((centers[-1] - centers[0]) / width)
-        if gap_cv > 0.70 or spread < 0.25:
+        if gap_cv > 1.10 or spread < 0.15:
             return {**empty, "candle_columns": count}
 
         # Require repeated, reasonably evenly spaced price marks distributed
@@ -92,7 +92,7 @@ class ChartScanner(QThread):
             0.45 + min(count, 30) / 100.0 + spread * 0.12
             + regularity * 0.12,
         )
-        if confidence < 0.68:
+        if confidence < 0.56:
             return {
                 **empty, "candle_columns": count,
                 "confidence": round(confidence, 2),
