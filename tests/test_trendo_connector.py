@@ -1,4 +1,4 @@
-from trendo_connector import classify_trendo_window, connection_report
+from trendo_connector import classify_trendo_window, connection_report, inspect_trendo_controls
 
 
 def test_classifies_trendo_chrome_window():
@@ -18,3 +18,16 @@ def test_execution_is_blocked_until_ui_validation():
     assert report["status"] == "detected"
     assert report["execution_enabled"] is False
     assert report["execution_status"] == "blocked_unverified_ui"
+
+
+
+def test_control_inspection_rejects_invalid_handle():
+    import pytest
+    with pytest.raises(ValueError):
+        inspect_trendo_controls(0)
+
+
+def test_control_inspection_rejects_invalid_limit():
+    import pytest
+    with pytest.raises(ValueError):
+        inspect_trendo_controls(123, max_controls=0)
