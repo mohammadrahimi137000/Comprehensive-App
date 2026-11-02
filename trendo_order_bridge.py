@@ -8,6 +8,7 @@ been verified for this installation yet.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from math import isfinite
 from typing import Any
 
 SUPPORTED_SYMBOLS = {"GOLD", "XAUUSD"}
@@ -32,11 +33,14 @@ class TrendoOrderRequest:
             raise ValueError("side must be BUY or SELL")
         if not isinstance(self.volume, (int, float)) or isinstance(self.volume, bool):
             raise ValueError("volume must be numeric")
-        if self.volume <= 0:
-            raise ValueError("volume must be positive")
+        if not isfinite(float(self.volume)) or self.volume <= 0:
+            raise ValueError("volume must be finite and positive")
         for name, value in (("stop_loss", self.stop_loss), ("take_profit", self.take_profit)):
-            if value is not None and (not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0):
-                raise ValueError(f"{name} must be a positive price or None")
+            if value is not None and (
+                not isinstance(value, (int, float)) or isinstance(value, bool)
+                or not isfinite(float(value)) or value <= 0
+            ):
+                raise ValueError(f"{name} must be a finite positive price or None")
         if self.stop_loss is not None and self.take_profit is not None:
             if side == "BUY" and self.stop_loss >= self.take_profit:
                 raise ValueError("For BUY, stop_loss must be below take_profit")
