@@ -210,7 +210,7 @@ def _parse_money(value: str) -> float:
     import re
 
     text = str(value).strip().replace(",", "").replace("$", "")
-    if not re.fullmatch(r"[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)", text):
+    if not re.fullmatch(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)", text):
         raise ValueError(f"Invalid monetary value: {value!r}")
     return float(text)
 
@@ -235,7 +235,7 @@ def parse_trendo_position_row(name: str) -> dict:
         raise ValueError(f"Unsupported position symbol: {symbol!r}")
     if normalized_side not in {"BUY", "SELL"}:
         raise ValueError(f"Unsupported position side: {side!r}")
-    if not re.fullmatch(r"\\d{5,}", ticket):
+    if not re.fullmatch(r"\d{5,}", ticket):
         raise ValueError(f"Invalid position ticket: {ticket!r}")
 
     def number(value: str, field: str) -> float:
