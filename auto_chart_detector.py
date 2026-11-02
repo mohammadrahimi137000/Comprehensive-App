@@ -122,7 +122,7 @@ class ChartScanner(QThread):
             normalized_title = " ".join(title.casefold().split())
             if any(token in normalized_title for token in (
                 "microsoft store", "windows store", "start menu",
-                "search", "windows widgets",
+                "windows widgets",
             )):
                 return
             try:
