@@ -273,7 +273,8 @@ def parse_trendo_positions(controls: list[dict]) -> dict:
         if control.get("control_type") != "Group":
             continue
         name = control.get("name", "")
-        if not str(name).lstrip().casefold().startswith(("gold\\n", "xauusd\\n")):
+        first_line = next((line.strip().casefold() for line in str(name).splitlines() if line.strip()), "")
+        if first_line not in {"gold", "xauusd"}:
             continue
         try:
             positions.append(parse_trendo_position_row(name))
