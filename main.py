@@ -29,6 +29,7 @@ from tick_flow import TickPressure
 from news_engine import RssNewsClient, BiQuoteContextClient
 from reference_monitor import SpotReferenceMonitor
 from history_bootstrap import HistoryBootstrapper
+from trendo_connector import discover_trendo_windows, connection_report
 
 
 class FeedBridge(QObject):
@@ -121,7 +122,7 @@ class MainWindow(QMainWindow):
         menu = [
             "داشبورد اصلی", "تشخیص خودکار چارت", "پیش‌بینی ۱۵ دقیقه آینده",
             "حمایت و مقاومت", "سناریوهای بازار", "تاریخچه پیش‌بینی‌ها",
-            "گزارش عملکرد", "تنظیمات", "ژورنال معاملات",
+            "گزارش عملکرد", "تنظیمات", "ژورنال معاملات", "اتصال Trendo",
         ]
         for index, name in enumerate(menu):
             button = QPushButton(name)
@@ -266,6 +267,23 @@ class MainWindow(QMainWindow):
             self.performance_output.setReadOnly(True)
             layout.addWidget(self.performance_output, 1)
             self._refresh_performance()
+
+        elif index == 9:
+            note = QLabel(
+                "شناسایی پنجره Trendo در نسخه ویندوز و Chrome. این نسخه فقط وضعیت اتصال "
+                "را می‌خواند؛ تا زمان اعتبارسنجی کنترل‌ها و تأیید سفارش، اجرای خودکار غیرفعال است."
+            )
+            note.setWordWrap(True)
+            note.setObjectName("muted")
+            layout.addWidget(note)
+            refresh = QPushButton("بررسی دوباره پنجره‌های Trendo")
+            refresh.clicked.connect(self._refresh_trendo_status)
+            layout.addWidget(refresh)
+            self.trendo_output = QPlainTextEdit()
+            self.trendo_output.setReadOnly(True)
+            self.trendo_output.setPlaceholderText("وضعیت نسخه ویندوز و مرورگر Trendo")
+            layout.addWidget(self.trendo_output, 1)
+            self._refresh_trendo_status()
         elif index == 8:
             note = QLabel("ثبت دستی معاملات برای ژورنال و ارزیابی عملکرد؛ این بخش هیچ سفارشی به کارگزاری ارسال نمی‌کند.")
             note.setWordWrap(True)
@@ -388,6 +406,20 @@ class MainWindow(QMainWindow):
 
 
 
+
+
+    def _refresh_trendo_status(self):
+        """Read-only discovery; no clicks or order submission are performed."""
+        try:
+            windows = discover_trendo_windows()
+            report = connection_report(windows)
+            self.trendo_output.setPlainText(json.dumps(
+                report, ensure_ascii=False, indent=2
+            ))
+        except Exception as exc:
+            self.trendo_output.setPlainText(
+                f"بررسی Trendo ناموفق بود: {type(exc).__name__}: {exc}"
+            )
 
     def _train_ml_model(self):
         try:
