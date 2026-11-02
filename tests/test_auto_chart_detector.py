@@ -32,3 +32,30 @@ def test_rejects_empty_and_small_images():
 def test_rejects_plain_background():
     image = np.full((360, 900, 3), (25, 30, 40), dtype=np.uint8)
     assert ChartScanner.analyze_image(image)["is_chart"] is False
+
+
+
+def test_rejects_microsoft_store_even_when_pixels_look_colorful():
+    image = make_candlestick_chart()
+    result = ChartScanner.analyze_image(image, window_title="Microsoft Store")
+    assert result["is_chart"] is False
+    assert result["reason"] == "excluded_non_trading_window"
+
+
+def test_rejects_sparse_colorful_ui_elements():
+    image = np.full((360, 900, 3), (24, 30, 42), dtype=np.uint8)
+    # A small number of colorful product-tile-like columns must not qualify.
+    for index in range(9):
+        x = 30 + index * 90
+        color = (40, 220, 70) if index % 2 else (30, 40, 230)
+        image[70:280, x:x + 14] = color
+    assert ChartScanner.analyze_image(image)["is_chart"] is False
+
+
+def test_rejects_irregular_colored_columns():
+    image = np.full((360, 900, 3), (24, 30, 42), dtype=np.uint8)
+    positions = [20, 45, 110, 145, 260, 290, 470, 510, 720, 760, 850]
+    for index, x in enumerate(positions):
+        color = (40, 220, 70) if index % 2 else (30, 40, 230)
+        image[65 + (index % 3) * 8:285, x:x + 8] = color
+    assert ChartScanner.analyze_image(image)["is_chart"] is False
