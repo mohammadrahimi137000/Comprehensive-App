@@ -171,7 +171,7 @@ def inspect_trendo_controls(hwnd: int, max_controls: int = 250) -> dict:
         position_candidates = [
             item for item in controls
             if item["control_type"] == "Group"
-            and item["name"].lstrip().casefold().startswith(("gold\\n", "xauusd\\n"))
+            and item["name"].lstrip().casefold().startswith(("gold\n", "xauusd\n"))
         ]
         order_control_candidates = [
             item for item in controls
@@ -180,7 +180,7 @@ def inspect_trendo_controls(hwnd: int, max_controls: int = 250) -> dict:
         quote_text_candidates = [
             item for item in controls
             if item["control_type"] == "Text"
-            and any(token in item["name"].casefold() for token in ("\\nbuy", "\\nsell", "gold"))
+            and any(token in item["name"].casefold() for token in ("\nbuy", "\nsell", "gold"))
         ]
         return {
             "status": "inspected",
