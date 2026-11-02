@@ -18,9 +18,10 @@ def test_no_entry_when_m5_trend_is_sideways_or_unknown():
 def test_adds_only_after_a_new_position_becomes_profitable_and_in_trend():
     policy = TrendFollowingPolicy(enabled=True)
     policy.evaluate(100, "bearish", [PositionSnapshot("s1", "SELL", -0.1)])
-    assert policy.evaluate(102, "bearish", [PositionSnapshot("s1", "SELL", 0.2)]) == [
-        # A starter position turning profitable is a new profit confirmation.
-        policy.evaluate(102, "bearish", [PositionSnapshot("s1", "SELL", 0.2)])[0]
+    # A starter position turning profitable is a new profit confirmation.
+    added = policy.evaluate(102, "bearish", [PositionSnapshot("s1", "SELL", 0.2)])
+    assert [(i.action, i.side, i.reason) for i in added] == [
+        ("OPEN", "SELL", "add_after_new_profitable_position:s1")
     ]
     assert policy.evaluate(104, "bearish", [PositionSnapshot("s1", "SELL", 0.3)]) == []
 
