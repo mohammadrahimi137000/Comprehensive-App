@@ -59,7 +59,7 @@ pytesseract با pip نصب می‌شود، اما خود برنامه Tesseract
 | فایل | مسئولیت |
 |---|---|
 | main.py | داشبورد، اتصال سرویس‌ها و چرخه عمر برنامه |
-| trendo_connector.py | شناسایی خواندنی پنجره‌های Trendo در ویندوز و مرورگر؛ اجرای سفارش هنوز مسدود است |
+| trendo_connector.py | شناسایی پنجره و فهرست‌برداری فقط‌خواندنی UIA؛ اجرای سفارش هنوز مسدود است |
 | auto_chart_detector.py, chart_vision.py, chart_recognition.py | شناسایی پنجره، ROI، OCR و تخمین OHLC تصویری |
 | biquote_stream.py, resilient_feed.py, provider_clients.py | SignalR، fallback و کلاینت‌های داده |
 | history_bootstrap.py, candle_builder.py, live_market_pipeline.py, market_store.py | تاریخچه، ساخت کندل و SQLite |
