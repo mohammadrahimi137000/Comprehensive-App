@@ -168,13 +168,33 @@ def inspect_trendo_controls(hwnd: int, max_controls: int = 250) -> dict:
                 })
             except Exception:
                 continue
+        position_candidates = [
+            item for item in controls
+            if item["control_type"] == "Group"
+            and any(token in item["name"].casefold() for token in ("\\ngold\\n", "\\nsell\\n", "\\nbuy\\n"))
+        ]
+        order_control_candidates = [
+            item for item in controls
+            if item["control_type"] in ("Edit", "Button", "ComboBox", "CheckBox")
+        ]
+        quote_text_candidates = [
+            item for item in controls
+            if item["control_type"] == "Text"
+            and any(token in item["name"].casefold() for token in ("\\nbuy", "\\nsell", "gold"))
+        ]
         return {
             "status": "inspected",
             "hwnd": hwnd,
             "controls": controls,
+            "diagnostics": {
+                "position_row_candidates": position_candidates,
+                "order_control_candidates": order_control_candidates,
+                "quote_text_candidates": quote_text_candidates,
+                "note": "این موارد فقط کاندیدای تشخیصی هستند؛ نام یا مقدارشان به‌تنهایی برای اجرای سفارش معتبر نیست.",
+            },
             "truncated": len(controls) >= max_controls,
             "execution_enabled": False,
-            "message": "فهرست کنترل‌ها فقط خوانده شده؛ هیچ تعاملی با پنل انجام نشده است.",
+            "message": "فهرست کنترل‌ها، مختصات و مقادیر قابل‌خواندن فقط مشاهده شده‌اند؛ هیچ تعاملی انجام نشده است.",
         }
     except Exception as exc:
         return {
