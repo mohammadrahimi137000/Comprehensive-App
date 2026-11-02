@@ -29,7 +29,10 @@ from tick_flow import TickPressure
 from news_engine import RssNewsClient, BiQuoteContextClient
 from reference_monitor import SpotReferenceMonitor
 from history_bootstrap import HistoryBootstrapper
-from trendo_connector import (\n    discover_trendo_windows, connection_report, inspect_trendo_controls,\n    parse_trendo_positions,\n)
+from trendo_connector import (
+    discover_trendo_windows, connection_report, inspect_trendo_controls,
+    parse_trendo_positions,
+)
 
 from trendo_order_bridge import inspect_order_form_controls
 
