@@ -203,3 +203,95 @@ def inspect_trendo_controls(hwnd: int, max_controls: int = 250) -> dict:
             "controls": [],
             "execution_enabled": False,
         }
+
+
+def _parse_money(value: str) -> float:
+    """Parse a broker-rendered USD amount without silently accepting junk."""
+    import re
+
+    text = str(value).strip().replace(",", "").replace("$", "")
+    if not re.fullmatch(r"[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)", text):
+        raise ValueError(f"Invalid monetary value: {value!r}")
+    return float(text)
+
+
+def parse_trendo_position_row(name: str) -> dict:
+    """Parse the currently observed Trendo Flutter GOLD position row.
+
+    Expected accessible-text order:
+    symbol, ticket, side, volume, opened_at, open_price, stop_loss,
+    take_profit, swap, commission, floating_profit.
+    Unknown or incomplete layouts are rejected rather than guessed.
+    """
+    import re
+
+    fields = [line.strip() for line in str(name).splitlines() if line.strip()]
+    if len(fields) != 11:
+        raise ValueError(f"Expected 11 non-empty position fields, got {len(fields)}")
+    symbol, ticket, side, volume, opened_at, open_price, stop_loss, take_profit, swap, commission, profit = fields
+    normalized_symbol = symbol.upper()
+    normalized_side = side.upper()
+    if normalized_symbol not in {"GOLD", "XAUUSD"}:
+        raise ValueError(f"Unsupported position symbol: {symbol!r}")
+    if normalized_side not in {"BUY", "SELL"}:
+        raise ValueError(f"Unsupported position side: {side!r}")
+    if not re.fullmatch(r"\\d{5,}", ticket):
+        raise ValueError(f"Invalid position ticket: {ticket!r}")
+
+    def number(value: str, field: str) -> float:
+        try:
+            return _parse_money(value)
+        except ValueError as exc:
+            raise ValueError(f"Invalid {field}: {value!r}") from exc
+
+    parsed = {
+        "symbol": normalized_symbol,
+        "position_id": ticket,
+        "side": normalized_side,
+        "volume": number(volume, "volume"),
+        "opened_at": opened_at,
+        "open_price": number(open_price, "open_price"),
+        "stop_loss": number(stop_loss, "stop_loss"),
+        "take_profit": number(take_profit, "take_profit"),
+        "swap_usd": number(swap, "swap"),
+        "commission_usd": number(commission, "commission"),
+        "floating_profit_usd": _parse_money(profit),
+    }
+    parsed["net_pnl_usd"] = (
+        parsed["floating_profit_usd"]
+        + parsed["swap_usd"]
+        + parsed["commission_usd"]
+    )
+    return parsed
+
+
+def parse_trendo_positions(controls: list[dict]) -> dict:
+    """Return structured positions from inspected UIA Group controls."""
+    positions = []
+    rejected = []
+    for control in controls:
+        if control.get("control_type") != "Group":
+            continue
+        name = control.get("name", "")
+        if not str(name).lstrip().casefold().startswith(("gold\\n", "xauusd\\n")):
+            continue
+        try:
+            positions.append(parse_trendo_position_row(name))
+        except (TypeError, ValueError) as exc:
+            rejected.append({"name": str(name)[:500], "reason": str(exc)})
+    ids = [item["position_id"] for item in positions]
+    if len(ids) != len(set(ids)):
+        return {
+            "status": "ambiguous_duplicate_ticket",
+            "positions": [],
+            "rejected": rejected,
+            "execution_ready": False,
+        }
+    return {
+        "status": "ok" if positions and not rejected else (
+            "partial" if positions else "no_verified_positions"
+        ),
+        "positions": positions,
+        "rejected": rejected,
+        "execution_ready": False,
+    }
