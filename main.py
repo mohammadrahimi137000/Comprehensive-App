@@ -29,7 +29,7 @@ from tick_flow import TickPressure
 from news_engine import RssNewsClient, BiQuoteContextClient
 from reference_monitor import SpotReferenceMonitor
 from history_bootstrap import HistoryBootstrapper
-from trendo_connector import discover_trendo_windows, connection_report, inspect_trendo_controls
+from trendo_connector import (\n    discover_trendo_windows, connection_report, inspect_trendo_controls,\n    parse_trendo_positions,\n)
 
 
 class FeedBridge(QObject):
@@ -435,12 +435,13 @@ class MainWindow(QMainWindow):
                 report = inspect_trendo_controls(int(window["hwnd"]))
                 report["window_title"] = window.get("title", "")
                 report["window_kind"] = window.get("kind", "")
+                report["parsed_positions"] = parse_trendo_positions(report.get("controls", []))
                 reports.append(report)
             self.trendo_output.setPlainText(json.dumps({
                 "inspection": "read_only",
                 "execution_enabled": False,
                 "windows": reports,
-                "next_step": "خروجی کنترل‌ها باید روی سیستم شما بررسی شود؛ این مرحله هیچ سفارش یا کلیکی انجام نمی‌دهد."
+                "next_step": "پوزیشن‌ها و PnL خالص ساختاریافته‌اند؛ کنترل‌های معتبر ثبت/بستن سفارش هنوز باید شناسایی و راستی‌آزمایی شوند."
             }, ensure_ascii=False, indent=2))
         except Exception as exc:
             self.trendo_output.setPlainText(
