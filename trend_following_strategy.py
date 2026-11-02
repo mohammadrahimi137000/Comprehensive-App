@@ -83,9 +83,6 @@ class TrendFollowingPolicy:
 
         open_ids = {position.position_id for position in positions}
         self._stopped_tickets_waiting_for_absence.intersection_update(open_ids)
-        if not self._stopped_tickets_waiting_for_absence and self._recovery_pair_pending:
-            self._recovery_pair_pending = False
-
         # A stop-out triggers exactly one recovery hedge pair, but only after
         # the stopped ticket is absent from a fresh, verified open-position scan.
         if self._stopped_tickets_waiting_for_absence:
