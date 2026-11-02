@@ -36,7 +36,7 @@ def test_control_inspection_rejects_invalid_limit():
 def test_parses_trendo_position_and_net_pnl():
     from trendo_connector import parse_trendo_position_row
 
-    row = "GOLD\\n217396516\\nSell\\n  0.02\\n2026/11/03 00:44:03\\n3947.28\\n3945.21\\n0.00\\n0.00\\n-0.06\\n$4.14"
+    row = "GOLD\n217396516\nSell\n  0.02\n2026/11/03 00:44:03\n3947.28\n3945.21\n0.00\n0.00\n-0.06\n$4.14"
     parsed = parse_trendo_position_row(row)
     assert parsed["position_id"] == "217396516"
     assert parsed["side"] == "SELL"
@@ -49,15 +49,15 @@ def test_rejects_incomplete_or_unknown_position_rows():
     from trendo_connector import parse_trendo_position_row
 
     with pytest.raises(ValueError):
-        parse_trendo_position_row("GOLD\\n123456\\nBUY\\n0.02")
+        parse_trendo_position_row("GOLD\n123456\nBUY\n0.02")
     with pytest.raises(ValueError):
-        parse_trendo_position_row("GOLD\\n123456\\nHOLD\\n0.02\\n2026/11/03 00:00:00\\n1\\n0\\n0\\n0\\n0\\n0")
+        parse_trendo_position_row("GOLD\n123456\nHOLD\n0.02\n2026/11/03 00:00:00\n1\n0\n0\n0\n0\n0")
 
 
 def test_positions_parser_marks_duplicate_tickets_ambiguous():
     from trendo_connector import parse_trendo_positions
 
-    row = "GOLD\\n217396516\\nSell\\n0.02\\n2026/11/03 00:44:03\\n3947.28\\n3945.21\\n0.00\\n0.00\\n-0.06\\n$4.14"
+    row = "GOLD\n217396516\nSell\n0.02\n2026/11/03 00:44:03\n3947.28\n3945.21\n0.00\n0.00\n-0.06\n$4.14"
     result = parse_trendo_positions([
         {"control_type": "Group", "name": row},
         {"control_type": "Group", "name": row},
