@@ -29,7 +29,7 @@ from tick_flow import TickPressure
 from news_engine import RssNewsClient, BiQuoteContextClient
 from reference_monitor import SpotReferenceMonitor
 from history_bootstrap import HistoryBootstrapper
-from trendo_connector import discover_trendo_windows, connection_report
+from trendo_connector import discover_trendo_windows, connection_report, inspect_trendo_controls
 
 
 class FeedBridge(QObject):
@@ -279,6 +279,9 @@ class MainWindow(QMainWindow):
             refresh = QPushButton("بررسی دوباره پنجره‌های Trendo")
             refresh.clicked.connect(self._refresh_trendo_status)
             layout.addWidget(refresh)
+            inspect = QPushButton("بررسی کنترل‌های قابل‌دسترسی (فقط خواندنی)")
+            inspect.clicked.connect(self._inspect_trendo_ui)
+            layout.addWidget(inspect)
             self.trendo_output = QPlainTextEdit()
             self.trendo_output.setReadOnly(True)
             self.trendo_output.setPlaceholderText("وضعیت نسخه ویندوز و مرورگر Trendo")
@@ -419,6 +422,29 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             self.trendo_output.setPlainText(
                 f"بررسی Trendo ناموفق بود: {type(exc).__name__}: {exc}"
+            )
+
+    def _inspect_trendo_ui(self):
+        """Inventory accessible Trendo controls without interacting with them."""
+        try:
+            windows = discover_trendo_windows()
+            if not windows:
+                raise RuntimeError("پنجره Trendo شناسایی نشد؛ ابتدا صفحه یا برنامه Trendo را باز کنید.")
+            reports = []
+            for window in windows:
+                report = inspect_trendo_controls(int(window["hwnd"]))
+                report["window_title"] = window.get("title", "")
+                report["window_kind"] = window.get("kind", "")
+                reports.append(report)
+            self.trendo_output.setPlainText(json.dumps({
+                "inspection": "read_only",
+                "execution_enabled": False,
+                "windows": reports,
+                "next_step": "خروجی کنترل‌ها باید روی سیستم شما بررسی شود؛ این مرحله هیچ سفارش یا کلیکی انجام نمی‌دهد."
+            }, ensure_ascii=False, indent=2))
+        except Exception as exc:
+            self.trendo_output.setPlainText(
+                f"بررسی کنترل‌های Trendo ناموفق بود: {type(exc).__name__}: {exc}"
             )
 
     def _train_ml_model(self):
