@@ -75,6 +75,7 @@ class TrendFollowingPolicy:
                     "CLOSE", position.side, "stop_loss", position.position_id
                 ))
                 self._stopped_tickets_waiting_for_absence.add(position.position_id)
+                self._recovery_pair_pending = True
 
         # Never increase exposure while any close intent needs broker reconciliation.
         if intents:
