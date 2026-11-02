@@ -103,3 +103,68 @@ def connection_report(windows: list[dict]) -> dict:
             if windows else "پنجره Trendo پیدا نشد؛ نسخه ویندوز یا صفحه Trendo را باز کنید."
         ),
     }
+
+
+def inspect_trendo_controls(hwnd: int, max_controls: int = 250) -> dict:
+    """Return a read-only UI Automation inventory for a positively identified window.
+
+    No click, keyboard input, value change, order submission, or close action is
+    performed. UIA support is optional; browser content may be unavailable unless
+    the browser exposes its accessibility tree.
+    """
+    if sys.platform != "win32":
+        return {"status": "unsupported_platform", "controls": [], "execution_enabled": False}
+    if not isinstance(hwnd, int) or hwnd <= 0 or max_controls < 1:
+        raise ValueError("A valid HWND and positive max_controls are required")
+
+    try:
+        from pywinauto import Desktop
+    except ImportError:
+        return {
+            "status": "dependency_missing",
+            "message": "برای بررسی فقط‌خواندنی کنترل‌ها، pywinauto نصب نیست.",
+            "controls": [],
+            "execution_enabled": False,
+        }
+
+    try:
+        window = Desktop(backend="uia").window(handle=hwnd)
+        if not window.exists(timeout=2):
+            return {"status": "window_unavailable", "controls": [], "execution_enabled": False}
+        controls = []
+        for control in window.descendants():
+            if len(controls) >= max_controls:
+                break
+            try:
+                info = control.element_info
+                name = (info.name or "").strip()
+                control_type = (info.control_type or "").strip()
+                automation_id = (info.automation_id or "").strip()
+                class_name = (info.class_name or "").strip()
+                if not any((name, control_type, automation_id, class_name)):
+                    continue
+                controls.append({
+                    "name": name[:160],
+                    "control_type": control_type[:80],
+                    "automation_id": automation_id[:120],
+                    "class_name": class_name[:120],
+                    "enabled": bool(info.enabled),
+                    "visible": bool(info.visible),
+                })
+            except Exception:
+                continue
+        return {
+            "status": "inspected",
+            "hwnd": hwnd,
+            "controls": controls,
+            "truncated": len(controls) >= max_controls,
+            "execution_enabled": False,
+            "message": "فهرست کنترل‌ها فقط خوانده شده؛ هیچ تعاملی با پنل انجام نشده است.",
+        }
+    except Exception as exc:
+        return {
+            "status": "inspection_error",
+            "error": f"{type(exc).__name__}: {exc}",
+            "controls": [],
+            "execution_enabled": False,
+        }
