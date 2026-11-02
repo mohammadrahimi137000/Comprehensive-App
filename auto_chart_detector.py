@@ -34,60 +34,77 @@ class ChartScanner(QThread):
         self._own_pid = os.getpid()
 
     @staticmethod
-    def analyze_image(image: np.ndarray) -> dict[str, Any]:
-        """Detect repeated saturated candle-like columns in a BGR screenshot."""
-        empty = {"is_chart": False, "confidence": 0.0, "candle_columns": 0}
-        if image is None or image.size == 0 or image.ndim != 3:
+    def analyze_image(
+        image: np.ndarray, window_title: str = ""
+    ) -> dict[str, Any]:
+        """Conservative visual validation of a candlestick chart candidate."""
+        empty = {
+            "is_chart": False, "confidence": 0.0, "candle_columns": 0,
+            "reason": "insufficient_chart_structure",
+        }
+        if image is None or not isinstance(image, np.ndarray) or image.size == 0:
+            return empty
+        if image.ndim != 3 or image.shape[2] < 3:
             return empty
 
         height, width = image.shape[:2]
-        if width < 300 or height < 180 or image.shape[2] < 3:
+        if width < 300 or height < 180:
             return empty
 
-        hsv = cv2.cvtColor(image[:, :, :3], cv2.COLOR_BGR2HSV)
+        # Shell/store windows are common false positives: colorful tiles and
+        # product artwork can resemble candle columns at pixel level.
+        normalized_title = " ".join(window_title.casefold().replace("_", " ").split())
+        blocked_titles = (
+            "microsoft store", "windows store", "start menu",
+            "search", "windows widgets",
+        )
+        if any(token in normalized_title for token in blocked_titles):
+            return {**empty, "reason": "excluded_non_trading_window"}
 
-        # Require both saturation and brightness. Without the V floor, some
-        # dark neutral UI backgrounds fall into OpenCV's red hue interval.
-        green = cv2.inRange(hsv, np.array([35, 65, 65]), np.array([95, 255, 255]))
-        red_a = cv2.inRange(hsv, np.array([0, 70, 65]), np.array([12, 255, 255]))
-        red_b = cv2.inRange(hsv, np.array([165, 70, 65]), np.array([180, 255, 255]))
-        mask = cv2.bitwise_or(green, cv2.bitwise_or(red_a, red_b))
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8))
+        # Use the shared geometry extractor, then validate candle spacing.
+        # A handful of colored UI icons is not enough to qualify as a chart.
+        geometry = extract_candle_geometry(image[:, :, :3])
+        candles = geometry.get("candles", [])
+        count = len(candles)
+        if not geometry.get("is_chart") or count < 12:
+            return {**empty, "candle_columns": count}
 
-        # Each candle should create a compact run of colored x-columns. A
-        # minimum vertical pixel count rejects tiny icons and isolated labels.
-        min_vertical_pixels = max(8, int(height * 0.04))
-        active = np.count_nonzero(mask, axis=0) >= min_vertical_pixels
+        centers = np.asarray([item["x"] for item in candles], dtype=float)
+        gaps = np.diff(centers)
+        if len(gaps) < 11 or np.any(gaps <= 0):
+            return {**empty, "candle_columns": count}
 
-        runs: list[tuple[int, int]] = []
-        start = None
-        for x, is_active in enumerate(active):
-            if is_active and start is None:
-                start = x
-            elif not is_active and start is not None:
-                runs.append((start, x - 1))
-                start = None
-        if start is not None:
-            runs.append((start, width - 1))
+        median_gap = float(np.median(gaps))
+        if median_gap < max(3.0, width * 0.004) or median_gap > width * 0.12:
+            return {**empty, "candle_columns": count}
 
-        max_run_width = max(18, int(width * 0.025))
-        candle_runs = [(a, b) for a, b in runs if b - a + 1 <= max_run_width]
-        if len(candle_runs) < 8:
-            return empty
+        gap_cv = float(np.std(gaps) / max(1.0, np.mean(gaps)))
+        spread = float((centers[-1] - centers[0]) / width)
+        if gap_cv > 0.70 or spread < 0.25:
+            return {**empty, "candle_columns": count}
 
-        centers = [(a + b) // 2 for a, b in candle_runs]
-        spread = (centers[-1] - centers[0]) / max(1, width)
-        # Repeated candle-like columns should occupy a meaningful horizontal
-        # portion of the image, rather than one small colored toolbar cluster.
-        if spread < 0.18:
-            return empty
+        # Require repeated, reasonably evenly spaced price marks distributed
+        # across the plot. Keep confidence conservative rather than promoting
+        # weak candidates into the chart selector.
+        regularity = max(0.0, 1.0 - gap_cv)
+        confidence = min(
+            0.96,
+            0.45 + min(count, 30) / 100.0 + spread * 0.12
+            + regularity * 0.12,
+        )
+        if confidence < 0.68:
+            return {
+                **empty, "candle_columns": count,
+                "confidence": round(confidence, 2),
+                "reason": "low_structural_confidence",
+            }
 
-        count = len(centers)
-        confidence = min(0.90, 0.35 + count / 45.0 + spread * 0.15)
         return {
             "is_chart": True,
             "confidence": round(confidence, 2),
             "candle_columns": count,
+            "reason": "repeated_candle_geometry",
+            "gap_cv": round(gap_cv, 3),
         }
 
     def detect_candles(self, image: np.ndarray) -> bool:
@@ -101,6 +118,12 @@ class ChartScanner(QThread):
                 return
             title = win32gui.GetWindowText(hwnd).strip()
             if not title:
+                return
+            normalized_title = " ".join(title.casefold().split())
+            if any(token in normalized_title for token in (
+                "microsoft store", "windows store", "start menu",
+                "search", "windows widgets",
+            )):
                 return
             try:
                 _, pid = win32process.GetWindowThreadProcessId(hwnd)
@@ -135,15 +158,19 @@ class ChartScanner(QThread):
         while not self._stop_event.is_set():
             try:
                 found = []
+                seen_hwnds = set()
                 with mss.MSS() as screen:
                     virtual = screen.monitors[0]
                     for window in self.get_visible_windows():
+                        if window["hwnd"] in seen_hwnds:
+                            continue
+                        seen_hwnds.add(window["hwnd"])
                         region = self._intersection(window, virtual)
                         if region is None:
                             continue
                         frame = np.asarray(screen.grab(region))
                         frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
-                        result = self.analyze_image(frame)
+                        result = self.analyze_image(frame, window_title=window["title"])
                         if result["is_chart"]:
                             geometry = extract_candle_geometry(frame)
                             roi = geometry.get("roi")
