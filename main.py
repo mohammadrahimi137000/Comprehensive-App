@@ -31,6 +31,7 @@ from reference_monitor import SpotReferenceMonitor
 from history_bootstrap import HistoryBootstrapper
 from trendo_connector import (\n    discover_trendo_windows, connection_report, inspect_trendo_controls,\n    parse_trendo_positions,\n)
 
+from trendo_order_bridge import inspect_order_form_controls
 
 class FeedBridge(QObject):
     status_changed = Signal(str)
@@ -281,6 +282,9 @@ class MainWindow(QMainWindow):
             layout.addWidget(refresh)
             inspect = QPushButton("بررسی کنترل‌های قابل‌دسترسی (فقط خواندنی)")
             inspect.clicked.connect(self._inspect_trendo_ui)
+            inspect_order = QPushButton("شناسایی کاندیداهای فرم سفارش (فقط خواندنی)")
+            inspect_order.clicked.connect(self._inspect_trendo_order_form)
+            layout.addWidget(inspect_order)
             layout.addWidget(inspect)
             self.trendo_output = QPlainTextEdit()
             self.trendo_output.setReadOnly(True)
@@ -446,6 +450,29 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             self.trendo_output.setPlainText(
                 f"بررسی کنترل‌های Trendo ناموفق بود: {type(exc).__name__}: {exc}"
+            )
+
+    def _inspect_trendo_order_form(self):
+        """Read-only scan for possible order-form controls; never submits orders."""
+        try:
+            windows = discover_trendo_windows()
+            if not windows:
+                raise RuntimeError("پنجره Trendo شناسایی نشد؛ ابتدا Trendo را باز کنید.")
+            reports = []
+            for window in windows:
+                report = inspect_order_form_controls(int(window["hwnd"]))
+                report["window_title"] = window.get("title", "")
+                report["window_kind"] = window.get("kind", "")
+                reports.append(report)
+            self.trendo_output.setPlainText(json.dumps({
+                "inspection": "read_only_order_form_candidates",
+                "execution_enabled": False,
+                "windows": reports,
+                "next_step": "کاندیداها باید با فرم واقعی و بدون ثبت سفارش بررسی شوند؛ هیچ کلیک یا تغییری انجام نشده است."
+            }, ensure_ascii=False, indent=2))
+        except Exception as exc:
+            self.trendo_output.setPlainText(
+                f"شناسایی فرم سفارش ناموفق بود: {type(exc).__name__}: {exc}"
             )
 
     def _train_ml_model(self):
