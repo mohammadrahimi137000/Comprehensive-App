@@ -143,13 +143,28 @@ def inspect_trendo_controls(hwnd: int, max_controls: int = 250) -> dict:
                 class_name = (info.class_name or "").strip()
                 if not any((name, control_type, automation_id, class_name)):
                     continue
+                try:
+                    rect = info.rectangle
+                    bounds = {
+                        "left": int(rect.left), "top": int(rect.top),
+                        "right": int(rect.right), "bottom": int(rect.bottom),
+                    }
+                except Exception:
+                    bounds = None
+                try:
+                    value = control.get_value()
+                    value = str(value)[:200] if value is not None else None
+                except Exception:
+                    value = None
                 controls.append({
-                    "name": name[:160],
+                    "name": name[:240],
                     "control_type": control_type[:80],
                     "automation_id": automation_id[:120],
                     "class_name": class_name[:120],
                     "enabled": bool(info.enabled),
                     "visible": bool(info.visible),
+                    "bounds": bounds,
+                    "value": value,
                 })
             except Exception:
                 continue
