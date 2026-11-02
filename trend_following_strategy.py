@@ -39,6 +39,7 @@ class TrendFollowingPolicy:
     _last_entry_at: float | None = None
     _processed_winners: set[str] = field(default_factory=set)
     _stopped_tickets_waiting_for_absence: set[str] = field(default_factory=set)
+    _close_requests_pending: set[str] = field(default_factory=set)
     _recovery_pair_pending: bool = False
 
     def __post_init__(self) -> None:
@@ -67,21 +68,31 @@ class TrendFollowingPolicy:
         intents: list[OrderIntent] = []
         for position in positions:
             if position.net_pnl_usd >= self.take_profit_usd:
-                intents.append(OrderIntent(
-                    "CLOSE", position.side, "take_profit", position.position_id
-                ))
+                if position.position_id not in self._close_requests_pending:
+                    intents.append(OrderIntent(
+                        "CLOSE", position.side, "take_profit", position.position_id
+                    ))
+                    self._close_requests_pending.add(position.position_id)
             elif position.net_pnl_usd <= -self.stop_loss_usd:
-                intents.append(OrderIntent(
-                    "CLOSE", position.side, "stop_loss", position.position_id
-                ))
-                self._stopped_tickets_waiting_for_absence.add(position.position_id)
-                self._recovery_pair_pending = True
+                if position.position_id not in self._close_requests_pending:
+                    intents.append(OrderIntent(
+                        "CLOSE", position.side, "stop_loss", position.position_id
+                    ))
+                    self._close_requests_pending.add(position.position_id)
+                    self._stopped_tickets_waiting_for_absence.add(position.position_id)
+                    self._recovery_pair_pending = True
 
         # Never increase exposure while any close intent needs broker reconciliation.
         if intents:
             return intents
 
         open_ids = {position.position_id for position in positions}
+        # Keep a close request latched while its ticket remains visible. This
+        # prevents duplicate CLOSE intents and blocks new exposure until the
+        # broker confirms the ticket has disappeared.
+        self._close_requests_pending.intersection_update(open_ids)
+        if self._close_requests_pending:
+            return []
         self._stopped_tickets_waiting_for_absence.intersection_update(open_ids)
         # A stop-out triggers exactly one recovery hedge pair, but only after
         # the stopped ticket is absent from a fresh, verified open-position scan.
