@@ -38,6 +38,7 @@ from trendo_visual_inspector import inspect_trendo_visual_ocr
 from trendo_order_form_layout import analyze_order_form_layout
 
 from trendo_order_bridge import inspect_order_form_controls
+from toobit import ToobitClient, ToobitConfig
 
 class FeedBridge(QObject):
     status_changed = Signal(str)
@@ -129,7 +130,7 @@ class MainWindow(QMainWindow):
         menu = [
             "داشبورد اصلی", "تشخیص خودکار چارت", "پیش‌بینی ۱۵ دقیقه آینده",
             "حمایت و مقاومت", "سناریوهای بازار", "تاریخچه پیش‌بینی‌ها",
-            "گزارش عملکرد", "تنظیمات", "ژورنال معاملات", "اتصال Trendo",
+            "گزارش عملکرد", "تنظیمات", "ژورنال معاملات", "اتصال Trendo", "اتصال Toobit",
         ]
         for index, name in enumerate(menu):
             button = QPushButton(name)
@@ -303,6 +304,23 @@ class MainWindow(QMainWindow):
             self.trendo_output.setPlaceholderText("وضعیت نسخه ویندوز و مرورگر Trendo")
             layout.addWidget(self.trendo_output, 1)
             self._refresh_trendo_status()
+        elif index == 10:
+            note = QLabel(
+                "اتصال رسمی REST به قرارداد دائمی طلای Toobit. این صفحه ابتدا زمان سرور، "
+                "قوانین قرارداد و قیمت Mark را فقط به‌صورت خواندنی بررسی می‌کند. "
+                "ارسال سفارش واقعی در این نسخه قفل است."
+            )
+            note.setWordWrap(True)
+            note.setObjectName("muted")
+            layout.addWidget(note)
+            check_button = QPushButton("بررسی اتصال و وضعیت قرارداد طلا")
+            check_button.clicked.connect(self._check_toobit_connection)
+            layout.addWidget(check_button)
+            self.toobit_output = QPlainTextEdit()
+            self.toobit_output.setReadOnly(True)
+            self.toobit_output.setPlaceholderText("نتیجه بررسی اتصال Toobit اینجا نمایش داده می‌شود.")
+            layout.addWidget(self.toobit_output, 1)
+            self._check_toobit_connection()
         elif index == 8:
             note = QLabel("ثبت دستی معاملات برای ژورنال و ارزیابی عملکرد؛ این بخش هیچ سفارشی به کارگزاری ارسال نمی‌کند.")
             note.setWordWrap(True)
@@ -426,6 +444,45 @@ class MainWindow(QMainWindow):
 
 
 
+
+    def _check_toobit_connection(self):
+        try:
+            config = ToobitConfig.from_env()
+            config.validate()
+            client = ToobitClient(
+                api_key=config.api_key,
+                api_secret=config.api_secret,
+                base_url=config.base_url,
+                recv_window_ms=config.recv_window_ms,
+            )
+            server = client.server_time()
+            info = client.exchange_info()
+            contracts = info.get("contracts", []) if isinstance(info, dict) else []
+            contract = next(
+                (item for item in contracts if item.get("symbol") == config.symbol),
+                None,
+            )
+            result = {
+                "connection": "ok",
+                "server_time": server,
+                "configured_symbol": config.symbol,
+                "contract_found": contract is not None,
+                "contract_status": contract.get("status") if contract else None,
+                "contract_multiplier": contract.get("contractMultiplier") if contract else None,
+                "live_trading_enabled": config.live_trading_enabled,
+                "execution": "locked_until_protective_orders_and_fill_reconciliation_are_verified",
+            }
+            if contract:
+                result["mark_price"] = client.mark_price(config.symbol)
+            else:
+                result["warning"] = "Configured contract was not found in exchangeInfo; verify symbol and availability."
+            self.toobit_output.setPlainText(json.dumps(result, ensure_ascii=False, indent=2))
+        except Exception as exc:
+            self.toobit_output.setPlainText(json.dumps({
+                "connection": "error",
+                "error": str(exc),
+                "hint": "Public market-data checks do not require API keys. Never paste API secrets into the app chat or source code.",
+            }, ensure_ascii=False, indent=2))
 
     def _refresh_trendo_status(self):
         """Read-only discovery; no clicks or order submission are performed."""
