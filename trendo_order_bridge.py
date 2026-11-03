@@ -56,8 +56,19 @@ class TrendoOrderRequest:
         )
 
 
+def _normalise_action_label(value: Any) -> str:
+    """Normalise an accessible label without matching larger words like 'buying'."""
+    import re
+    return re.sub(r"[^a-z]+", "", str(value or "").casefold())
+
+
 def inspect_order_form_controls(hwnd: int, inspector=None) -> dict:
-    """Read-only UIA inspection; returns candidates, never actionable selectors."""
+    """Read-only UIA inspection, including Flutter Text-rendered action labels.
+
+    Buy/Sell Text nodes are reported as manual action targets when they have
+    visible screen bounds. They are not treated as verified buttons and this
+    function never invokes them.
+    """
     if inspector is None:
         from trendo_connector import inspect_trendo_controls
         inspector = inspect_trendo_controls
@@ -66,18 +77,21 @@ def inspect_order_form_controls(hwnd: int, inspector=None) -> dict:
         return {
             "status": report.get("status", "inspection_failed"),
             "candidates": [],
+            "manual_action_targets": [],
             "execution_enabled": False,
             "message": report.get("message", "UIA inspection was not successful."),
         }
 
     candidates = []
+    manual_action_targets = []
     for item in report.get("controls", []):
-        if not item.get("visible") or not item.get("enabled"):
+        if not item.get("visible"):
             continue
         kind = str(item.get("control_type", ""))
+        name = str(item.get("name", "")).strip()
         label = " ".join(str(item.get(key, "")) for key in ("name", "automation_id", "class_name")).casefold()
         signals = []
-        if kind in {"Edit", "ComboBox", "Spinner"}:
+        if item.get("enabled") and kind in {"Edit", "ComboBox", "Spinner"}:
             if any(word in label for word in ("volume", "lot", "amount", "size", "حجم")):
                 signals.append("volume_field_candidate")
             if any(word in label for word in ("symbol", "instrument", "نماد")):
@@ -86,31 +100,63 @@ def inspect_order_form_controls(hwnd: int, inspector=None) -> dict:
                 signals.append("stop_loss_field_candidate")
             if any(word in label for word in ("take", "profit", "tp", "حد سود")):
                 signals.append("take_profit_field_candidate")
-        if kind in {"Button", "Text"}:
-            if any(word in label for word in ("buy", "خرید")):
-                signals.append("buy_action_candidate")
-            if any(word in label for word in ("sell", "فروش")):
-                signals.append("sell_action_candidate")
+        exact_action = _normalise_action_label(name)
+        if kind in {"Button", "Text"} and exact_action in {"buy", "sell"}:
+            side = exact_action.upper()
+            bounds = item.get("bounds")
+            valid_bounds = (
+                isinstance(bounds, dict)
+                and all(isinstance(bounds.get(key), (int, float))
+                        for key in ("left", "top", "right", "bottom"))
+                and bounds["right"] > bounds["left"]
+                and bounds["bottom"] > bounds["top"]
+            )
+            if valid_bounds:
+                manual_action_targets.append({
+                    "side": side,
+                    "control_type": kind,
+                    "name": name,
+                    "bounds": dict(bounds),
+                    "enabled_hint": bool(item.get("enabled")),
+                    "verified": False,
+                    "interaction": "manual_user_action_only",
+                    "reason": (
+                        "Flutter may expose the visible action as Text; "
+                        "bounds identify a candidate region, not a verified clickable control."
+                    ),
+                })
+            signals.append(f"{side.lower()}_action_candidate")
         if signals:
             candidates.append({
                 "control_type": kind,
-                "name": item.get("name", ""),
+                "name": name,
                 "automation_id": item.get("automation_id", ""),
                 "bounds": item.get("bounds"),
                 "signals": signals,
                 "verified": False,
             })
+    targets_by_side = {item["side"] for item in manual_action_targets}
     return {
-        "status": "candidates_found" if candidates else "no_order_form_candidates",
+        "status": "manual_demo_targets_detected" if manual_action_targets else (
+            "candidates_found" if candidates else "no_order_form_candidates"
+        ),
         "hwnd": hwnd,
         "candidates": candidates,
+        "manual_action_targets": manual_action_targets,
+        "manual_demo_preflight": {
+            "buy_target_detected": "BUY" in targets_by_side,
+            "sell_target_detected": "SELL" in targets_by_side,
+            "both_sides_detected": {"BUY", "SELL"}.issubset(targets_by_side),
+            "automatic_click_allowed": False,
+            "user_must_place_test_order_manually": True,
+            "ticket_confirmation_required_after_manual_order": True,
+        },
         "execution_enabled": False,
         "message": (
-            "کاندیداها فقط از متن و نوع کنترل استخراج شده‌اند؛ "
-            "هیچ selector یا اقدام معاملاتی تأیید نشده است."
+            "Buy/Sell می‌توانند در رابط Flutter به‌صورت Text دیده شوند؛ "
+            "محدوده فقط برای راهنمایی کاربر ثبت شده و کلیک خودکار انجام نمی‌شود."
         ),
     }
-
 
 class TrendoExecutionBridge:
     """Fail-closed boundary between strategy intents and Trendo UI."""
