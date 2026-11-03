@@ -1,12 +1,9 @@
 """Signal-to-order bridge. Dry-run is the default; live mode requires two explicit gates."""
 from __future__ import annotations
 
-import re
 import uuid
-from decimal import Decimal
 
 from .config import ToobitConfig
-from .risk import calculate_contract_quantity
 
 
 class ToobitExecutionService:
@@ -67,21 +64,3 @@ class ToobitExecutionService:
         if not self.config.live_trading_enabled or not confirm_live:
             return {**intent, "status": "dry_run", "message": "No order was sent. Enable live mode in local environment and explicitly confirm this execution."}
         return {**intent, "status": "blocked", "reason": "Live order submission is intentionally locked until exchange-native protective stop-loss/take-profit placement and fill reconciliation are implemented and tested. No order was sent."}
-        contract = self._contract()
-        min_qty, step, multiplier = self._filters(contract)
-        quantity = calculate_contract_quantity(
-            entry_price=intent["entry_reference"], stop_price=intent["stop_loss"],
-            risk_usdt=self.config.risk_per_trade_usdt, contract_multiplier=multiplier,
-            max_notional_usdt=self.config.max_notional_usdt, min_quantity=min_qty,
-            quantity_step=step,
-        )
-        direction = intent["direction"]
-        client_id = "ca_" + uuid.uuid4().hex[:24]
-        result = self.client.place_futures_market_order(
-            symbol=self.config.symbol, side="BUY" if direction == "bullish" else "SELL",
-            position_side="LONG" if direction == "bullish" else "SHORT",
-            quantity=format(quantity, "f"), client_order_id=client_id,
-        )
-        return {**intent, "status": "submitted", "client_order_id": client_id,
-                "quantity": format(quantity, "f"), "exchange_response": result,
-                "warning": "Entry submitted. Protective SL/TP attachment and fill reconciliation must be confirmed before unattended live use."}
