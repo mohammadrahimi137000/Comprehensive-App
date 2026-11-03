@@ -19,16 +19,16 @@ def test_valid_buy_request_is_prepared_but_not_submitted():
     assert result["request"]["symbol"] == "XAUUSD"
 
 
-@pytest.mark.parametrize("request", [
+@pytest.mark.parametrize("order_request", [
     TrendoOrderRequest("XAUUSD", "BUY", 0, client_order_id="x"),
     TrendoOrderRequest("EURUSD", "BUY", 0.1, client_order_id="x"),
     TrendoOrderRequest("XAUUSD", "HOLD", 0.1, client_order_id="x"),
     TrendoOrderRequest("XAUUSD", "BUY", 0.1),
     TrendoOrderRequest("XAUUSD", "BUY", 0.1, stop_loss=3910, take_profit=3900, client_order_id="x"),
 ])
-def test_invalid_order_requests_are_rejected(request):
+def test_invalid_order_requests_are_rejected(order_request):
     with pytest.raises(ValueError):
-        request.validate()
+        order_request.validate()
 
 
 def test_close_position_is_blocked_without_ui_action():
