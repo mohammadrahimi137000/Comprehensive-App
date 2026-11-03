@@ -97,7 +97,7 @@ def inspect_trendo_visual_ocr(
         candidates = [
             word for word in words
             if any(term in word["text"].casefold() for term in ORDER_TERMS)
-            or re.fullmatch(r"(?:\\d{1,6}(?:[.,]\\d{1,5})?|\\d+\\.\\d+)", word["text"])
+            or re.fullmatch(r"(?:\d{1,6}(?:[.,]\d{1,5})?|\d+\\.\d+)", word["text"])
         ]
         return {
             "status": "ocr_completed",
