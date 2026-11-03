@@ -86,3 +86,30 @@ pytesseract با pip نصب می‌شود، اما خود برنامه Tesseract
 ## حریم خصوصی
 
 پردازش تصویر روی رایانه محلی انجام می‌شود. OCR دوره‌ای از capture حافظه‌ای استفاده می‌کند و screenshot فایل فقط با اقدام کاربر برای ژورنال ذخیره می‌شود. کندل‌ها، مدل آموزش‌دیده و ژورنال در پوشه data/ محلی می‌مانند. درخواست‌های شبکه فقط برای دریافت quote، OHLC تاریخی، خبر، تقویم و مرجع Spot هستند.
+
+
+## اتصال آزمایشی Toobit (مرحله اول)
+
+ماژول مستقل `toobit/` برای اتصال USDT-M Futures اضافه شده است:
+
+- `toobit/client.py`: REST client با هدر `X-BB-APIKEY` و امضای HMAC-SHA256 مطابق مستندات رسمی؛
+- `toobit/config.py`: تنظیمات فقط از متغیرهای محیطی خوانده می‌شوند؛
+- `toobit/risk.py`: محاسبه حجم بر اساس فاصله SL، ارزش ریسک و محدودیت notional با استفاده از مشخصات قرارداد؛
+- `toobit/execution.py`: تبدیل پلن آماده بررسی به intent و dry-run؛
+- نماد پیش‌فرض `XAU-SWAP-USDT` است، اما پیش از هر اقدام باید از `exchangeInfo` وجود قرارداد و وضعیت `TRADING` تأیید شود.
+
+### تنظیم محلی (PowerShell)
+
+```powershell
+$env:TOOBIT_API_KEY = "کلید API"
+$env:TOOBIT_API_SECRET = "Secret API"
+$env:TOOBIT_SYMBOL = "XAU-SWAP-USDT"
+$env:TOOBIT_LIVE_TRADING = "false"
+$env:TOOBIT_MAX_LEVERAGE = "1"
+$env:TOOBIT_RISK_PER_TRADE_USDT = "1"
+$env:TOOBIT_MAX_NOTIONAL_USDT = "25"
+```
+
+کلیدها را در Git، چت یا فایل‌های قابل اشتراک قرار ندهید. مجوز برداشت لازم نیست.
+
+**محدودیت فعلی:** این مرحله به‌صورت پیش‌فرض فقط داده عمومی، محاسبه intent و dry-run را آماده می‌کند. ارسال سفارش واقعی عمداً قفل است تا ثبت و تأیید SL/TP صرافی، بازیابی وضعیت پس از قطع اتصال، جلوگیری از سفارش تکراری و reconcile شدن fillها تکمیل و تست شوند. Toobit محیط Testnet عمومی ارائه نمی‌کند؛ بنابراین تست سفارش باید با شبیه‌ساز محلی و سپس بررسی دستی حساب انجام شود.
