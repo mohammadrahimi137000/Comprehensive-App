@@ -34,6 +34,7 @@ from trendo_connector import (
     parse_trendo_positions,
 )
 from trendo_uia_inspector import inspect_trendo_window_detailed
+from trendo_visual_inspector import inspect_trendo_visual_ocr
 
 from trendo_order_bridge import inspect_order_form_controls
 
@@ -288,6 +289,9 @@ class MainWindow(QMainWindow):
             inspect.clicked.connect(self._inspect_trendo_ui)
             inspect_detailed = QPushButton("بررسی کامل و بازگشتی کنترل‌ها (فقط خواندنی)")
             inspect_detailed.clicked.connect(self._inspect_trendo_ui_detailed)
+            inspect_ocr = QPushButton("بررسی تصویری فرم با OCR (فقط خواندنی)")
+            inspect_ocr.clicked.connect(self._inspect_trendo_visual_ocr)
+            layout.addWidget(inspect_ocr)
             layout.addWidget(inspect_detailed)
             inspect_order = QPushButton("شناسایی کاندیداهای فرم سفارش (فقط خواندنی)")
             inspect_order.clicked.connect(self._inspect_trendo_order_form)
@@ -486,6 +490,42 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             self.trendo_output.setPlainText(
                 f"بررسی کامل کنترل‌های Trendo ناموفق بود: {type(exc).__name__}: {exc}"
+            )
+
+    def _inspect_trendo_visual_ocr(self):
+        """OCR the visible Trendo window in memory; never interacts with its UI."""
+        try:
+            windows = discover_trendo_windows()
+            if not windows:
+                raise RuntimeError("پنجره Trendo شناسایی نشد؛ ابتدا Trendo را باز کنید.")
+            reports = []
+            tesseract_path = ""
+            if hasattr(self, "tesseract_path_input"):
+                tesseract_path = self.tesseract_path_input.text().strip()
+            for window in windows:
+                report = inspect_trendo_visual_ocr(
+                    int(window["hwnd"]),
+                    tesseract_path=tesseract_path or None,
+                    languages="eng",
+                    min_confidence=20,
+                )
+                report["window_title"] = window.get("title", "")
+                report["window_kind"] = window.get("kind", "")
+                reports.append(report)
+            self.trendo_output.setPlainText(json.dumps({
+                "inspection": "read_only_visual_ocr",
+                "execution_enabled": False,
+                "execution_status": "blocked_unverified_ui",
+                "windows": reports,
+                "next_step": (
+                    "متن‌ها و کادرهای OCR را با فرم قابل مشاهده تطبیق دهید. "
+                    "OCR ممکن است اعداد یا برچسب‌ها را اشتباه بخواند؛ هیچ کاندیدایی "
+                    "بدون اعتبارسنجی مستقل قابل استفاده برای سفارش نیست."
+                )
+            }, ensure_ascii=False, indent=2))
+        except Exception as exc:
+            self.trendo_output.setPlainText(
+                f"OCR تصویری Trendo ناموفق بود: {type(exc).__name__}: {exc}"
             )
 
     def _inspect_trendo_order_form(self):
