@@ -57,7 +57,18 @@ def inspect_trendo_window_detailed(hwnd: int, max_controls: int = 1200) -> dict:
         wrappers = list(window.descendants())
         # UIA descendants are already recursively enumerated by pywinauto.
         # Build stable parent links when the provider exposes parent() reliably.
-        wrapper_ids = {id(item): index for index, item in enumerate(wrappers)}
+        def runtime_key(element_info):
+            value = _safe(lambda: element_info.runtime_id, None)
+            try:
+                return tuple(int(part) for part in value) if value else None
+            except (TypeError, ValueError):
+                return None
+
+        wrapper_ids = {}
+        for wrapper_index, item in enumerate(wrappers):
+            key = runtime_key(item.element_info)
+            if key is not None:
+                wrapper_ids[key] = wrapper_index
         for index, control in enumerate(wrappers[:max_controls]):
             info = control.element_info
             rect = _safe(lambda: info.rectangle)
@@ -68,9 +79,12 @@ def inspect_trendo_window_detailed(hwnd: int, max_controls: int = 1200) -> dict:
                     "right": int(rect.right), "bottom": int(rect.bottom),
                 }
             parent_index = None
+            parent_runtime_id = None
             parent = _safe(lambda: control.parent())
             if parent is not None:
-                parent_index = wrapper_ids.get(id(parent))
+                parent_runtime_id = runtime_key(parent.element_info)
+                if parent_runtime_id is not None:
+                    parent_index = wrapper_ids.get(parent_runtime_id)
             runtime_id = _safe(lambda: list(info.runtime_id), None)
             value = _safe(lambda: control.get_value(), None)
             if value is not None:
@@ -84,6 +98,7 @@ def inspect_trendo_window_detailed(hwnd: int, max_controls: int = 1200) -> dict:
             row = {
                 "index": index,
                 "parent_index": parent_index,
+                "parent_runtime_id": list(parent_runtime_id) if parent_runtime_id else None,
                 "name": name,
                 "control_type": control_type,
                 "automation_id": automation_id,
