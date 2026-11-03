@@ -320,7 +320,6 @@ class MainWindow(QMainWindow):
             self.toobit_output.setReadOnly(True)
             self.toobit_output.setPlaceholderText("نتیجه بررسی اتصال Toobit اینجا نمایش داده می‌شود.")
             layout.addWidget(self.toobit_output, 1)
-            self._check_toobit_connection()
         elif index == 8:
             note = QLabel("ثبت دستی معاملات برای ژورنال و ارزیابی عملکرد؛ این بخش هیچ سفارشی به کارگزاری ارسال نمی‌کند.")
             note.setWordWrap(True)
