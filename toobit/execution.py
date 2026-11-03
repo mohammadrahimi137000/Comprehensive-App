@@ -46,10 +46,10 @@ class ToobitExecutionService:
         bias = analysis.get("directional_bias")
         if bias not in ("bullish", "bearish"):
             return {"status": "blocked", "reason": "Neutral or missing directional bias"}
-        quote = analysis.get("live_quote") or {}
-        entry = quote.get("ask" if bias == "bullish" else "bid") or analysis.get("last_close")
-        stop = readiness.get("stop_loss") or analysis.get("risk_reference", {}).get("invalidation_level")
-        take_profit = readiness.get("take_profit")
+        plan = readiness.get("plan") or {}
+        entry = plan.get("entry")
+        stop = plan.get("stop_loss")
+        take_profit = plan.get("take_profit")
         if not entry or not stop or not take_profit:
             return {"status": "blocked", "reason": "Entry, stop-loss and take-profit are all required"}
         if bias == "bullish" and not (float(stop) < float(entry) < float(take_profit)):
@@ -66,6 +66,7 @@ class ToobitExecutionService:
             return intent
         if not self.config.live_trading_enabled or not confirm_live:
             return {**intent, "status": "dry_run", "message": "No order was sent. Enable live mode in local environment and explicitly confirm this execution."}
+        return {**intent, "status": "blocked", "reason": "Live order submission is intentionally locked until exchange-native protective stop-loss/take-profit placement and fill reconciliation are implemented and tested. No order was sent."}
         contract = self._contract()
         min_qty, step, multiplier = self._filters(contract)
         quantity = calculate_contract_quantity(
