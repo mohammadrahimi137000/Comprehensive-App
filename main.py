@@ -33,6 +33,7 @@ from trendo_connector import (
     discover_trendo_windows, connection_report, inspect_trendo_controls,
     parse_trendo_positions,
 )
+from trendo_uia_inspector import inspect_trendo_window_detailed
 
 from trendo_order_bridge import inspect_order_form_controls
 
@@ -285,6 +286,9 @@ class MainWindow(QMainWindow):
             layout.addWidget(refresh)
             inspect = QPushButton("بررسی کنترل‌های قابل‌دسترسی (فقط خواندنی)")
             inspect.clicked.connect(self._inspect_trendo_ui)
+            inspect_detailed = QPushButton("بررسی کامل و بازگشتی کنترل‌ها (فقط خواندنی)")
+            inspect_detailed.clicked.connect(self._inspect_trendo_ui_detailed)
+            layout.addWidget(inspect_detailed)
             inspect_order = QPushButton("شناسایی کاندیداهای فرم سفارش (فقط خواندنی)")
             inspect_order.clicked.connect(self._inspect_trendo_order_form)
             layout.addWidget(inspect_order)
@@ -453,6 +457,35 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             self.trendo_output.setPlainText(
                 f"بررسی کنترل‌های Trendo ناموفق بود: {type(exc).__name__}: {exc}"
+            )
+
+    def _inspect_trendo_ui_detailed(self):
+        """Export a detailed recursive UIA inventory; never interact with Trendo."""
+        try:
+            windows = discover_trendo_windows()
+            if not windows:
+                raise RuntimeError("پنجره Trendo شناسایی نشد؛ ابتدا Trendo را باز کنید.")
+            reports = []
+            for window in windows:
+                report = inspect_trendo_window_detailed(int(window["hwnd"]))
+                report["window_title"] = window.get("title", "")
+                report["window_kind"] = window.get("kind", "")
+                report["window_bounds"] = window.get("bounds")
+                reports.append(report)
+            self.trendo_output.setPlainText(json.dumps({
+                "inspection": "read_only_detailed_recursive",
+                "execution_enabled": False,
+                "execution_status": "blocked_unverified_ui",
+                "windows": reports,
+                "next_step": (
+                    "فهرست کنترل‌ها و کاندیداهای فرم سفارش را بررسی کنید. "
+                    "اگر فیلدهای ORDER در فهرست نیستند، احتمالاً Flutter آنها را "
+                    "به‌صورت Canvas رسم کرده و باید مسیر OCR تصویریِ فقط‌خواندنی بررسی شود."
+                )
+            }, ensure_ascii=False, indent=2))
+        except Exception as exc:
+            self.trendo_output.setPlainText(
+                f"بررسی کامل کنترل‌های Trendo ناموفق بود: {type(exc).__name__}: {exc}"
             )
 
     def _inspect_trendo_order_form(self):
