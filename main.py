@@ -35,6 +35,7 @@ from trendo_connector import (
 )
 from trendo_uia_inspector import inspect_trendo_window_detailed
 from trendo_visual_inspector import inspect_trendo_visual_ocr
+from trendo_order_form_layout import analyze_order_form_layout
 
 from trendo_order_bridge import inspect_order_form_controls
 
@@ -511,6 +512,7 @@ class MainWindow(QMainWindow):
                 )
                 report["window_title"] = window.get("title", "")
                 report["window_kind"] = window.get("kind", "")
+                report["order_form_layout"] = analyze_order_form_layout(report)
                 reports.append(report)
             self.trendo_output.setPlainText(json.dumps({
                 "inspection": "read_only_visual_ocr",
@@ -518,9 +520,9 @@ class MainWindow(QMainWindow):
                 "execution_status": "blocked_unverified_ui",
                 "windows": reports,
                 "next_step": (
-                    "متن‌ها و کادرهای OCR را با فرم قابل مشاهده تطبیق دهید. "
-                    "OCR ممکن است اعداد یا برچسب‌ها را اشتباه بخواند؛ هیچ کاندیدایی "
-                    "بدون اعتبارسنجی مستقل قابل استفاده برای سفارش نیست."
+                    "گزارش OCR و کاندیداهای هندسی فیلدهای فرم اضافه شدند. "
+                    "برچسب و عدد نزدیک فقط کاندیدا هستند؛ برای اعتبارسنجی بعدی "
+                    "خروجی OCR و UI Automation را با هم مقایسه کنید. هیچ کلیک یا سفارشی انجام نشده است."
                 )
             }, ensure_ascii=False, indent=2))
         except Exception as exc:
